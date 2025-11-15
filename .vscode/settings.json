@@ -1,0 +1,22 @@
+{
+    "files.associations": {
+        "*.tpp": "cpp",
+        "*.ino": "cpp"
+    },
+    "terminal.integrated.defaultProfile.windows": "Command Prompt",
+    "terminal.integrated.env.windows": {
+        "PATH": "${env:PATH};${workspaceFolder}\\.pio\\tools\\**"
+    },
+    "terminal.integrated.env.osx": {
+        "PATH": "${env:PATH}:${workspaceFolder}/.pio/tools/**"
+    },
+    "terminal.integrated.env.linux": {
+        "PATH": "${env:PATH}:${workspaceFolder}/.pio/tools/**"
+    },
+    "C_Cpp.errorSquiggles": "enabled",
+    "[cpp]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools",
+        "editor.formatOnSave": true
+    },
+    "cmake.configureOnOpen": false
+}

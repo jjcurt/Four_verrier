@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html  lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>File Manager - Four Verrier</title>
+  <style>
+    body{font-family:Arial;margin:12px;background:#f5f5f5} 
+    .header{background:white;padding:15px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+    .header h2{margin:0}
+    .back-link{text-decoration:none;color:#2196F3;font-size:0.9em}
+    .section{background:white;padding:20px;border-radius:8px;margin-bottom:20px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+    .section h3{color:#333;border-bottom:2px solid #2196F3;padding-bottom:8px;margin-top:0}
+    table{width:100%;border-collapse:collapse}
+    td,th{padding:6px;border:1px solid #ddd}
+    button{padding:8px 12px;margin:2px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;font-size:0.9em}
+    button:hover{background:#1976D2}
+    button.danger{background:#f44336}
+    button.danger:hover{background:#da190b}
+    input[type="file"]{margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:4px;width:100%;max-width:400px}
+    .upload-hint{color:#666;font-size:0.85em;margin-top:5px}
+    .file-item{padding:10px;margin:8px 0;background:#f9f9f9;border-radius:4px;display:flex;justify-content:space-between;align-items:center}
+    .file-name{font-weight:500}
+    .empty{color:#999;font-style:italic;padding:10px}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>📁 Gestionnaire de fichiers</h2>
+    <a href="/" class="back-link">← Retour à l'accueil</a>
+  </div>
+  
+  <div class="section">
+    <h3>📄 Fichiers HTML (Interface Web)</h3>
+    <div id="htmlFiles" class="empty">Chargement...</div>
+    <form id="uploadHtmlForm" style="margin-top:15px">
+      <input type="file" id="htmlFileInput" name="file" accept=".html,.htm" required>
+      <button type="submit">📤 Téléverser HTML</button>
+      <div class="upload-hint">Téléverse vers /www/ pour mettre à jour l'interface web</div>
+    </form>
+  </div>
+
+  <div class="section">
+    <h3>📋 Programmes de cuisson</h3>
+    <div id="programs" class="empty">Chargement...</div>
+    <form id="uploadForm" style="margin-top:15px">
+      <input type="file" id="fileInput" name="file" accept=".json" required>
+      <button type="submit">📤 Téléverser Programme</button>
+      <div class="upload-hint">Fichiers JSON définissant les profils de température</div>
+    </form>
+  </div>
+  
+  <div class="section">
+    <h3>📊 Logs</h3>
+    <div id="logs" class="empty">Chargement...</div>
+  </div>
+
+  <div class="section">
+    <h3>🔧 Mise à jour Firmware (OTA)</h3>
+    <form id="uploadFirmwareForm" style="margin-bottom:15px">
+      <input type="file" id="firmwareFileInput" name="file" accept=".bin" required>
+      <button type="submit">📤 Téléverser Firmware (.bin)</button>
+      <div class="upload-hint">Téléverse le fichier .bin vers /updates/ pour mise à jour OTA</div>
+    </form>
+    <hr style="margin:20px 0;border:none;border-top:1px solid #ddd">
+    <p style="margin-bottom:10px"><strong>Appliquer une mise à jour depuis la carte SD:</strong></p>
+    <select id="otaFiles" style="padding:8px;margin-right:10px;border-radius:4px;border:1px solid #ddd"></select>
+    <button id="applyOta" style="background:#FF9800">🚀 Appliquer OTA</button>
+    <div class="upload-hint">⚠️ L'appareil redémarrera après application du firmware</div>
+  </div>
+
+  <script>
+    // List HTML files in /www/
+    async function listHtmlFiles(){
+      const res=await fetch('/api/list?dir=/www');
+      const data=await res.json();
+      const container=document.getElementById('htmlFiles');
+      container.innerHTML='';
+      if(data.length===0){
+        container.innerHTML='<div class="empty">(aucun fichier)</div>';
+        return;
+      }
+      data.forEach(name=>{
+        const item=document.createElement('div');
+        item.className='file-item';
+        item.innerHTML=`
+          <span class="file-name">${escapeHtml(name)}</span>
+          <div>
+            <button onclick="download('/download?path=/www/${encodeURIComponent(name)}')">⬇️ Télécharger</button>
+            <button class="danger" onclick="del('/www/${encodeURIComponent(name)}')">🗑️ Supprimer</button>
+          </div>
+        `;
+        container.appendChild(item);
+      })
+    }
+
+    async function listPrograms(){
+      const res=await fetch('/api/programs');
+      const data=await res.json();
+      const container=document.getElementById('programs');
+      container.innerHTML='';
+      if(data.length===0){
+        container.innerHTML='<div class="empty">(aucun programme)</div>';
+        return;
+      }
+      data.forEach(name=>{
+        const item=document.createElement('div');
+        item.className='file-item';
+        item.innerHTML=`
+          <span class="file-name">${escapeHtml(name)}</span>
+          <div>
+            <button onclick="download('/download?path=/programs/${encodeURIComponent(name)}')">⬇️ Télécharger</button>
+            <button class="danger" onclick="del('/programs/${encodeURIComponent(name)}')">🗑️ Supprimer</button>
+          </div>
+        `;
+        container.appendChild(item);
+      })
+    }
+
+    async function listLogs(){
+      const res=await fetch('/api/logs');
+      const data=await res.json();
+      const container=document.getElementById('logs');
+      container.innerHTML='';
+      if(data.length===0){
+        container.innerHTML='<div class="empty">(aucun log)</div>';
+        return;
+      }
+      data.forEach(name=>{
+        const item=document.createElement('div');
+        item.className='file-item';
+        item.innerHTML=`
+          <span class="file-name">${escapeHtml(name)}</span>
+          <div>
+            <button onclick="download('/download?path=/logs/${encodeURIComponent(name)}')">⬇️ Télécharger</button>
+            <button class="danger" onclick="del('/logs/${encodeURIComponent(name)}')">🗑️ Supprimer</button>
+          </div>
+        `;
+        container.appendChild(item);
+      })
+    }
+
+    async function listOtaCandidates(){
+      const res=await fetch('/api/list?dir=/updates');
+      const data=await res.json();
+      const sel=document.getElementById('otaFiles');
+      sel.innerHTML='';
+      if(data.length===0){
+        sel.innerHTML='<option value="">Aucun fichier disponible</option>';
+        return;
+      }
+      data.forEach(n=>{
+        const opt=document.createElement('option');
+        opt.value=n;
+        opt.textContent=n;
+        sel.appendChild(opt)
+      });
+    }
+
+    async function download(url){ window.location=url; }
+    
+    async function del(path){
+      if(!confirm('Supprimer '+path+' ?')) return;
+      const res=await fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:path})});
+      if(res.ok) { 
+        alert('Fichier supprimé'); 
+        loadAll();
+      } else {
+        alert('Échec de la suppression');
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Upload HTML file to /www/
+    document.getElementById('uploadHtmlForm').onsubmit=async (e)=>{
+      e.preventDefault();
+      const f=document.getElementById('htmlFileInput').files[0];
+      if(!f) return alert('Sélectionnez un fichier HTML');
+      const fd=new FormData();
+      fd.append('file', f, f.name);
+      const res=await fetch('/upload_to?dest=/www', {method:'POST', body:fd});
+      if(res.ok){ 
+        alert('Fichier HTML téléversé avec succès!'); 
+        document.getElementById('htmlFileInput').value='';
+        listHtmlFiles();
+      } else {
+        alert('Échec du téléversement');
+      }
+    };
+
+    // Upload program to /programs/
+    document.getElementById('uploadForm').onsubmit=async (e)=>{
+      e.preventDefault();
+      const f=document.getElementById('fileInput').files[0];
+      if(!f) return alert('Sélectionnez un fichier de programme');
+      const fd=new FormData();
+      fd.append('file', f, f.name);
+      const res=await fetch('/upload', {method:'POST', body:fd});
+      if(res.ok){ 
+        alert('Programme téléversé avec succès!'); 
+        document.getElementById('fileInput').value='';
+        listPrograms();
+      } else {
+        alert('Échec du téléversement');
+      }
+    };
+
+    // Upload firmware to /updates/
+    document.getElementById('uploadFirmwareForm').onsubmit=async (e)=>{
+      e.preventDefault();
+      const f=document.getElementById('firmwareFileInput').files[0];
+      if(!f) return alert('Sélectionnez un fichier firmware (.bin)');
+      if(!f.name.endsWith('.bin')){
+        alert('Le fichier doit avoir l\'extension .bin');
+        return;
+      }
+      const fd=new FormData();
+      fd.append('file', f, f.name);
+      alert('Téléversement du firmware en cours... Cela peut prendre quelques secondes.');
+      const res=await fetch('/upload_to?dest=/updates', {method:'POST', body:fd});
+      if(res.ok){ 
+        alert('Firmware téléversé avec succès dans /updates/!'); 
+        document.getElementById('firmwareFileInput').value='';
+        listOtaCandidates();
+      } else {
+        alert('Échec du téléversement du firmware');
+      }
+    };
+
+    // Apply OTA update
+    document.getElementById('applyOta').onclick=async ()=>{
+      const file=document.getElementById('otaFiles').value;
+      if(!file) return alert('Sélectionnez un fichier firmware');
+      if(!confirm('Appliquer la mise à jour depuis '+file+'?\n\n⚠️ L\'appareil va redémarrer.\n\nContinuer?')) return;
+      const res=await fetch('/apply_ota', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:'/updates/'+file})});
+      const txt=await res.text();
+      alert(txt);
+    }
+
+    function loadAll(){
+      listHtmlFiles();
+      listPrograms();
+      listLogs();
+      listOtaCandidates();
+    }
+
+    // Initial load
+    loadAll();
+  </script>
+</body>
+</html>

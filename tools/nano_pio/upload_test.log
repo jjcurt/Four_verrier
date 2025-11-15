@@ -1,0 +1,88 @@
+=== BUILD/UPLOAD ===
+
+Processing nano (platform: atmelavr; board: uno; framework: arduino)
+--------------------------------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/atmelavr/uno.html
+PLATFORM: Atmel AVR (5.1.0) > Arduino Uno
+HARDWARE: ATMEGA328P 16MHz, 2KB RAM, 31.50KB Flash
+DEBUG: Current (avr-stub) External (avr-stub, simavr)
+PACKAGES: 
+ - framework-arduino-avr @ 5.2.0 
+ - tool-avrdude @ 1.60300.200527 (6.3.0) 
+ - toolchain-atmelavr @ 1.70300.191015 (7.3.0)
+Converting relay_nano.ino
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 5 compatible libraries
+Scanning dependencies...
+No dependencies
+Building in release mode
+Compiling .pio/build/nano/src/relay_nano.ino.cpp.o
+Linking .pio/build/nano/firmware.elf
+Checking size .pio/build/nano/firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [=         ]  12.3% (used 251 bytes from 2048 bytes)
+Flash: [==        ]  16.3% (used 5260 bytes from 32256 bytes)
+Configuring upload protocol...
+AVAILABLE: arduino
+CURRENT: upload_protocol = arduino
+Looking for upload port...
+Using manually specified: /dev/ttyUSB0
+Uploading .pio/build/nano/firmware.hex
+
+avrdude: AVR device initialized and ready to accept instructions
+
+Reading | ################################################## | 100% 0.00s
+
+avrdude: Device signature = 0x1e950f (probably m328p)
+avrdude: reading input file ".pio/build/nano/firmware.hex"
+avrdude: writing flash (5260 bytes):
+
+Writing | ################################################## | 100% 0.88s
+
+avrdude: 5260 bytes of flash written
+avrdude: verifying flash memory against .pio/build/nano/firmware.hex:
+avrdude: load data flash data from input file .pio/build/nano/firmware.hex:
+avrdude: input file .pio/build/nano/firmware.hex contains 5260 bytes
+avrdude: reading on-chip flash data:
+
+Reading | ################################################## | 100% 0.69s
+
+avrdude: verifying ...
+avrdude: 5260 bytes of flash verified
+
+avrdude: safemode: Fuses OK (E:00, H:00, L:00)
+
+avrdude done.  Thank you.
+
+===================================== [SUCCESS] Took 3.65 seconds =====================================
+
+=== SERIAL TEST ===
+
+SEND: D1
+SEND: S1,1
+RECV: K1,1
+SEND: R1
+RECV: K1,1
+SEND: P2,512
+RECV: K2,0
+SEND: R2
+RECV: K2,0
+SEND: W25
+RECV: W,OK
+SEND: T10
+RECV: T,OK
+SEND: P2,1023
+RECV: K2,0
+SEND: R2
+RECV: K2,0
+SEND: P2,0
+RECV: K2,0
+SEND: R2
+RECV: K2,0
+SEND: D0
+RECV: D,OK
+TEST DONE
+
+=== LOG END ===

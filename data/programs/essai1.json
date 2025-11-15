@@ -1,0 +1,13 @@
+{
+    "name": "essai1",
+    "numSteps": 1,
+    "steps": [
+        {
+            "targetTemp": 150,
+            "rampRate": 50,
+            "withRamp": true,
+            "holdTime": 10,
+            "useSSR2": true
+        }
+    ]
+}

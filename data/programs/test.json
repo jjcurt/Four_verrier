@@ -1,0 +1,19 @@
+{
+    "name": "test",
+    "numSteps": 2,
+    "enableDataLog": true,
+    "steps": [
+        {
+            "targetTemp": 500,
+            "rampRate": 100,
+            "withRamp": true,
+            "holdTime": 30
+        },
+        {
+            "targetTemp": 0,
+            "rampRate": 50,
+            "withRamp": false,
+            "holdTime": 0
+        }
+    ]
+}

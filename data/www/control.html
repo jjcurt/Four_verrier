@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+        <meta charset="UTF-8">
+    <title>Panneau de contrôle - Four Verrier</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { 
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .header {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+        .back-link {
+            text-decoration: none;
+            color: #2196F3;
+            font-size: 0.9em;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #2196F3;
+            padding-bottom: 10px;
+        }
+        .status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .temp {
+            font-size: 2em;
+            font-weight: bold;
+            color: #e65100;
+        }
+        .button {
+            background: #2196F3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        .button:hover {
+            background: #1976D2;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .error {
+            color: red;
+        }
+        /* SSR status styling */
+        .ssr-indicator {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        .ssr-indicator.on {
+            background: #f44336;
+        }
+        .ssr-indicator.off {
+            background: #424242;
+        }
+        .ssr2-bar-container {
+            width: 200px;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .ssr2-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #FFA726 0%, #FF6F00 100%);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .ssr2-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            color: #333;
+            text-shadow: 0 0 3px white;
+        }
+        /* Graph canvas */
+        #tempGraph {
+            width: 100%;
+            height: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+        .graph-legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎛️ Panneau de contrôle</h1>
+        <a href="/" class="back-link">← Retour à l'accueil</a>
+    </div>
+    
+    <div class="card">
+        <h2>État actuel</h2>
+        <div class="status">
+            <div>
+                <div>Température</div>
+                <div class="temp" id="currentTemp">--°C</div>
+            </div>
+            <div>
+                <div>Cible</div>
+                <div class="temp" id="targetTemp">--°C</div>
+            </div>
+            <div>
+                <div>Programme</div>
+                <div id="programStatus">Not running</div>
+            </div>
+            <div>
+                <div>Étape</div>
+                <div id="stepStatus">-</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Contrôle des programmes</h2>
+        <select id="programSelect">
+            <option value="">Sélectionner un programme...</option>
+        </select>
+        <button class="button" id="startBtn">Démarrer</button>
+        <button class="button" id="stopBtn" disabled>Arrêter</button>
+    </div>
+
+    <div class="card">
+        <h2 onclick="toggleSettings()" style="cursor: pointer; user-select: none;">
+            ⚙️ Paramètres <span id="settingsToggle">▼</span>
+        </h2>
+        <div id="settingsPanel" style="display: block;">
+            <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #ddd;">
+                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">Échantillonnage</h3>
+                <label for="updateIntervalInput" style="display: block; margin-bottom: 5px;">
+                    Période: <span id="updateIntervalDisplay">1000</span> ms
+                </label>
+                <input type="range" id="updateIntervalInput" min="100" max="10000" step="100" value="1000" 
+                       style="width: 100%; margin-bottom: 5px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+                    <span>100ms</span>
+                    <span>10s</span>
+                </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">PID (régulateur)</h3>
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;">
+                    <label for="pidKpInput">Kp:</label>
+                    <input type="number" id="pidKpInput" step="0.1" value="40" style="width: 100%; padding: 5px;">
+                    
+                    <label for="pidKiInput">Ki:</label>
+                    <input type="number" id="pidKiInput" step="0.01" value="0.1" style="width: 100%; padding: 5px;">
+                    
+                    <label for="pidKdInput">Kd:</label>
+                    <input type="number" id="pidKdInput" step="0.1" value="4" style="width: 100%; padding: 5px;">
+                </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">Calibration température</h3>
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;">
+                    <label for="tempOffsetInput">Offset (°C):</label>
+                    <input type="number" id="tempOffsetInput" step="0.1" value="0" style="width: 100%; padding: 5px;">
+                </div>
+                <div style="margin-top: 5px; font-size: 11px; color: #666;">
+                    ℹ️ Ajustez si le thermocouple affiche une valeur incorrecte
+                </div>
+            </div>
+            <button class="button" id="applySettingsBtn">Appliquer les paramètres</button>
+            <div style="margin-top: 10px; font-size: 11px; color: #666;">
+                ℹ️ Les paramètres sont sauvegardés sur la carte SD
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📊 Évolution de la température</h2>
+        <canvas id="tempGraph"></canvas>
+        <div class="graph-legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background:#4CAF50"></div>
+                <span>Température actuelle</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background:#2196F3; border: 2px dashed #2196F3; height:0"></div>
+                <span>Température cible</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>⚡ État des relais SSR</h2>
+        <div class="status">
+            <div>
+                <div style="margin-bottom: 10px; font-weight: 500;">SSR 1 (Résistance principale)</div>
+                <div>
+                    <span class="ssr-indicator off" id="ssr1Indicator"></span>
+                    <span id="ssr1Status" style="font-size:1.2em; font-weight:bold">OFF</span>
+                </div>
+            </div>
+            <div>
+                <div style="margin-bottom: 10px; font-weight: 500;">SSR 2 (Contrôle PWM)</div>
+                <div>
+                    <div class="ssr2-bar-container">
+                        <div class="ssr2-bar" id="ssr2Bar"></div>
+                        <div class="ssr2-text" id="ssr2Percent">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let tempHistory = []; // Array of {time: seconds, temp: value}
+        let targetHistory = []; // Array of {time: seconds, target: value}
+        const MAX_HISTORY = 300; // 5 minutes at 1s intervals
+        let canvas, ctx;
+        let lastGraphUpdate = 0;
+    // Prevent telemetry from overwriting user's slider while editing
+    let userEditingInterval = false;
+
+        // Initialize canvas
+        window.onload = function() {
+            canvas = document.getElementById('tempGraph');
+            ctx = canvas.getContext('2d');
+            // Set canvas size
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            // Initial draw
+            drawGraph();
+            // Load programs
+            loadPrograms();
+            // Setup settings controls
+            setupSettingsControls();
+        };
+
+        // Toggle settings panel visibility
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            const toggle = document.getElementById('settingsToggle');
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                toggle.textContent = '▼';
+            } else {
+                panel.style.display = 'none';
+                toggle.textContent = '►';
+            }
+        }
+
+        // Setup settings controls
+        function setupSettingsControls() {
+            const slider = document.getElementById('updateIntervalInput');
+            const display = document.getElementById('updateIntervalDisplay');
+            const applyBtn = document.getElementById('applySettingsBtn');
+            
+            // Get all input fields that should prevent auto-update while editing
+            const pidKpInput = document.getElementById('pidKpInput');
+            const pidKiInput = document.getElementById('pidKiInput');
+            const pidKdInput = document.getElementById('pidKdInput');
+            const tempOffsetInput = document.getElementById('tempOffsetInput');
+            
+            // Update display when slider moves
+            slider.oninput = function() {
+                display.textContent = this.value;
+                userEditingInterval = true; // user is interacting; don't override
+            };
+            // Mark editing when pointer/touch begins
+            slider.addEventListener('pointerdown', () => { userEditingInterval = true; });
+            slider.addEventListener('touchstart', () => { userEditingInterval = true; }, { passive: true });
+            
+            // Mark editing when user focuses on any input field
+            [pidKpInput, pidKiInput, pidKdInput, tempOffsetInput].forEach(input => {
+                input.addEventListener('focus', () => { userEditingInterval = true; });
+                input.addEventListener('input', () => { userEditingInterval = true; });
+            });
+            
+            // Send all settings to ESP32 when button clicked
+            applyBtn.onclick = function() {
+                const newInterval = parseInt(slider.value);
+                const kp = parseFloat(pidKpInput.value);
+                const ki = parseFloat(pidKiInput.value);
+                const kd = parseFloat(pidKdInput.value);
+                const offset = parseFloat(tempOffsetInput.value);
+                
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ 
+                        updateInterval: newInterval,
+                        pidKp: kp,
+                        pidKi: ki,
+                        pidKd: kd,
+                        tempOffset: offset
+                    }));
+                    console.log('Settings applied:', {interval: newInterval, Kp: kp, Ki: ki, Kd: kd, offset: offset});
+                    userEditingInterval = false;
+                } else {
+                    alert('WebSocket non connecté');
+                }
+            };
+        }
+
+        // Handle window resize
+        window.onresize = function() {
+            if (canvas) {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                drawGraph();
+            }
+        };
+
+        function drawGraph() {
+            if (!ctx || tempHistory.length === 0) {
+                // Draw empty graph
+                ctx.fillStyle = '#fafafa';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#999';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('En attente de données...', canvas.width/2, canvas.height/2);
+                return;
+            }
+
+            const width = canvas.width;
+            const height = canvas.height;
+            const padding = { top: 20, right: 20, bottom: 40, left: 60 };
+            const graphWidth = width - padding.left - padding.right;
+            const graphHeight = height - padding.top - padding.bottom;
+
+            // Clear canvas
+            ctx.fillStyle = '#fafafa';
+            ctx.fillRect(0, 0, width, height);
+
+            // Find min/max temperatures and time range
+            const temps = tempHistory.map(d => d.temp).concat(targetHistory.map(d => d.target));
+            let minTemp = Math.min(...temps);
+            let maxTemp = Math.max(...temps);
+            const tempRange = maxTemp - minTemp;
+            if (tempRange < 10) {
+                minTemp -= 5;
+                maxTemp += 5;
+            } else {
+                const padding_temp = tempRange * 0.1;
+                minTemp -= padding_temp;
+                maxTemp += padding_temp;
+            }
+
+            // Time range from data
+            const minTime = Math.min(...tempHistory.map(d => d.time));
+            const maxTime = Math.max(...tempHistory.map(d => d.time));
+            const timeRange = maxTime - minTime;
+
+            // Draw axes
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, padding.top);
+            ctx.lineTo(padding.left, height - padding.bottom);
+            ctx.lineTo(width - padding.right, height - padding.bottom);
+            ctx.stroke();
+
+            // Draw Y-axis labels and grid
+            ctx.fillStyle = '#666';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'right';
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            const yTicks = 5;
+            for (let i = 0; i <= yTicks; i++) {
+                const temp = minTemp + (maxTemp - minTemp) * i / yTicks;
+                const y = height - padding.bottom - (graphHeight * i / yTicks);
+                
+                // Label
+                ctx.fillText(temp.toFixed(0) + '°C', padding.left - 10, y + 4);
+                
+                // Grid line
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+            }
+
+            // Draw X-axis labels (absolute time)
+            ctx.textAlign = 'center';
+            const xTicks = 5;
+            for (let i = 0; i <= xTicks; i++) {
+                const seconds = minTime + (timeRange * i / xTicks);
+                const x = padding.left + (graphWidth * i / xTicks);
+                
+                let label;
+                if (seconds < 60) {
+                    label = Math.floor(seconds) + 's';
+                } else if (seconds < 3600) {
+                    const mins = Math.floor(seconds / 60);
+                    const secs = Math.floor(seconds % 60);
+                    label = mins + ':' + (secs < 10 ? '0' : '') + secs;
+                } else {
+                    const hours = Math.floor(seconds / 3600);
+                    const mins = Math.floor((seconds % 3600) / 60);
+                    label = hours + 'h' + (mins < 10 ? '0' : '') + mins;
+                }
+                
+                ctx.fillText(label, x, height - padding.bottom + 20);
+            }
+
+            // Helper function to convert temp to Y coordinate
+            function tempToY(temp) {
+                const normalized = (temp - minTemp) / (maxTemp - minTemp);
+                return height - padding.bottom - (normalized * graphHeight);
+            }
+
+            // Helper function to convert time to X coordinate
+            function timeToX(time) {
+                if (timeRange === 0) return padding.left;
+                const normalized = (time - minTime) / timeRange;
+                return padding.left + (normalized * graphWidth);
+            }
+
+            // Draw target temperature line (dashed blue)
+            if (targetHistory.length > 1) {
+                ctx.strokeStyle = '#2196F3';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                targetHistory.forEach((d, i) => {
+                    const x = timeToX(d.time);
+                    const y = tempToY(d.target);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Draw current temperature line (solid green)
+            if (tempHistory.length > 1) {
+                ctx.strokeStyle = '#4CAF50';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                tempHistory.forEach((d, i) => {
+                    const x = timeToX(d.time);
+                    const y = tempToY(d.temp);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            }
+
+            // Draw current point marker
+            if (tempHistory.length > 0) {
+                const lastData = tempHistory[tempHistory.length - 1];
+                const x = timeToX(lastData.time);
+                const y = tempToY(lastData.temp);
+                
+                ctx.fillStyle = '#4CAF50';
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+
+        function updateSSRDisplay(ssr1, ssr2) {
+            // SSR1 - binary ON/OFF
+            const ssr1Indicator = document.getElementById('ssr1Indicator');
+            const ssr1Status = document.getElementById('ssr1Status');
+            
+            if (ssr1) {
+                ssr1Indicator.classList.remove('off');
+                ssr1Indicator.classList.add('on');
+                ssr1Status.textContent = 'ON';
+                ssr1Status.style.color = '#f44336';
+            } else {
+                ssr1Indicator.classList.remove('on');
+                ssr1Indicator.classList.add('off');
+                ssr1Status.textContent = 'OFF';
+                ssr1Status.style.color = '#666';
+            }
+
+            // SSR2 - percentage (0-1023 mapped to 0-100%)
+            const ssr2Value = typeof ssr2 === 'number' ? ssr2 : 0;
+            const ssr2Percent = Math.round((ssr2Value / 1023) * 100);
+            
+            document.getElementById('ssr2Bar').style.width = ssr2Percent + '%';
+            document.getElementById('ssr2Percent').textContent = ssr2Percent + '%';
+        }
+
+        function connectWebSocket() {
+            const protocol = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+            const wsUrl = protocol + location.host + '/ws';
+            ws = new WebSocket(wsUrl);
+            ws.onopen = () => console.log('WebSocket connected to', wsUrl);
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // Update temperature displays
+                    if (typeof data.temp === 'number') {
+                        document.getElementById('currentTemp').textContent = data.temp.toFixed(1) + '°C';
+                        
+                        // Add to history with timestamp
+                        tempHistory.push({time: data.elapsedSeconds || 0, temp: data.temp});
+                        if (tempHistory.length > MAX_HISTORY) {
+                            tempHistory.shift();
+                            targetHistory.shift();
+                        }
+                    }
+                    
+                    if (typeof data.target === 'number') {
+                        document.getElementById('targetTemp').textContent = data.target.toFixed(1) + '°C';
+                        targetHistory.push({time: data.elapsedSeconds || 0, target: data.target});
+                    }
+                    
+                    // Update program status and button states
+                    const isRunning = data.program ? true : false;
+                    const startBtn = document.getElementById('startBtn');
+                    const stopBtn = document.getElementById('stopBtn');
+                    
+                    if (isRunning) {
+                        let statusText = data.programName || 'En cours';
+                        if (data.phase) {
+                            statusText += ` (${data.phase})`;
+                        }
+                        document.getElementById('programStatus').textContent = statusText;
+                        
+                        // Check for presence of totalSteps (programStep can be 0, which is falsy)
+                        if (typeof data.programStep !== 'undefined' && data.totalSteps) {
+                            document.getElementById('stepStatus').textContent = `Étape ${data.programStep}/${data.totalSteps}`;
+                        } else {
+                            document.getElementById('stepStatus').textContent = '-';
+                        }
+                        
+                        // Enable stop button, disable start button
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                    } else {
+                        document.getElementById('programStatus').textContent = 'Arrêté';
+                        document.getElementById('stepStatus').textContent = '-';
+                        
+                        // Enable start button, disable stop button
+                        startBtn.disabled = false;
+                        stopBtn.disabled = true;
+                    }
+                    
+                    // Update SSR displays
+                    updateSSRDisplay(data.ssr1, data.ssr2);
+                    
+                    // Update interval slider if present in data, unless user is editing
+                    if (typeof data.updateInterval === 'number') {
+                        const slider = document.getElementById('updateIntervalInput');
+                        const display = document.getElementById('updateIntervalDisplay');
+                        if (slider && display && !userEditingInterval) {
+                            slider.value = data.updateInterval;
+                            display.textContent = data.updateInterval;
+                        }
+                    }
+                    
+                    // Update PID inputs if present in data, unless user is editing
+                    if (!userEditingInterval) {
+                        if (typeof data.pidKp === 'number') {
+                            document.getElementById('pidKpInput').value = data.pidKp;
+                        }
+                        if (typeof data.pidKi === 'number') {
+                            document.getElementById('pidKiInput').value = data.pidKi;
+                        }
+                        if (typeof data.pidKd === 'number') {
+                            document.getElementById('pidKdInput').value = data.pidKd;
+                        }
+                        if (typeof data.tempOffset === 'number') {
+                            document.getElementById('tempOffsetInput').value = data.tempOffset;
+                        }
+                    }
+                    
+                    // Redraw graph (throttled to once per second)
+                    const now = Date.now();
+                    if (now - lastGraphUpdate > 1000) {
+                        drawGraph();
+                        lastGraphUpdate = now;
+                    }
+                    
+                } catch (e) { 
+                    console.error('Invalid WS message', e); 
+                }
+            };
+            ws.onclose = () => setTimeout(connectWebSocket, 2000);
+            ws.onerror = (e) => console.error('WebSocket error', e);
+        }
+        connectWebSocket();
+
+        // Fetch initial status
+        fetch('/status')
+            .then(r => r.json())
+            .then(s => {
+                if (typeof s.temp === 'number') {
+                    document.getElementById('currentTemp').textContent = s.temp.toFixed(1) + '°C';
+                    tempHistory.push({time: s.elapsedSeconds || 0, temp: s.temp});
+                }
+                if (typeof s.target === 'number') {
+                    document.getElementById('targetTemp').textContent = s.target.toFixed(1) + '°C';
+                    targetHistory.push({time: s.elapsedSeconds || 0, target: s.target});
+                }
+                // Initialize slider from status if available
+                if (typeof s.updateInterval === 'number') {
+                    const slider = document.getElementById('updateIntervalInput');
+                    const display = document.getElementById('updateIntervalDisplay');
+                    if (slider && display) {
+                        slider.value = s.updateInterval;
+                        display.textContent = s.updateInterval;
+                    }
+                }
+                // Initialize PID inputs from status
+                if (typeof s.pidKp === 'number') {
+                    document.getElementById('pidKpInput').value = s.pidKp;
+                }
+                if (typeof s.pidKi === 'number') {
+                    document.getElementById('pidKiInput').value = s.pidKi;
+                }
+                if (typeof s.pidKd === 'number') {
+                    document.getElementById('pidKdInput').value = s.pidKd;
+                }
+                if (typeof s.tempOffset === 'number') {
+                    document.getElementById('tempOffsetInput').value = s.tempOffset;
+                }
+                document.getElementById('programStatus').textContent = s.program ? 'En cours' : 'Arrêté';
+                updateSSRDisplay(s.ssr1, s.ssr2);
+                drawGraph();
+            }).catch(()=>{/* ignore if not available */});
+
+        // Fetch available programs
+        function loadPrograms() {
+            fetch('/programs')
+                .then(response => response.json())
+                .then(programs => {
+                    const select = document.getElementById('programSelect');
+                    programs.forEach(prog => {
+                        const option = document.createElement('option');
+                        option.value = prog;
+                        option.textContent = prog;
+                        select.appendChild(option);
+                    });
+                });
+        }
+
+        // Button handlers
+        document.getElementById('startBtn').onclick = () => {
+            const program = document.getElementById('programSelect').value;
+            if (program) {
+                fetch('/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({program})
+                });
+            } else {
+                alert('Veuillez sélectionner un programme');
+            }
+        };
+
+        document.getElementById('stopBtn').onclick = () => {
+            if (confirm('Arrêter le programme en cours ?')) {
+                fetch('/stop', {method: 'POST'});
+            }
+        };
+    </script>
+</body>
+</html>

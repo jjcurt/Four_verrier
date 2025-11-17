@@ -14,10 +14,10 @@
 
 // Uncomment to enable debug logging via Serial (development only)
 // WARNING: This will conflict with relay communication! Use only during development.
-// #define DEBUG_SERIAL
+#define DEBUG_SERIAL
 
 // Firmware version
-const char *FIRMWARE_VERSION = "1.0.0";
+const char *FIRMWARE_VERSION = "1.0.3-maj";
 
 // Debug logging macros
 #ifdef DEBUG_SERIAL
@@ -43,6 +43,8 @@ const char *FIRMWARE_VERSION = "1.0.0";
 #include <FS.h>
 #include <ArduinoJson.h>
 #include <Update.h>
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
 #include "pins.h"
 #include "config.h"
 #include "wifi_manager.h"
@@ -1256,6 +1258,18 @@ void setupWebServer()
             if (final) { 
                 uploadFile.close();
                 DEBUG_PRINTF("Upload complete: %s (%u bytes)\n", uploadPath.c_str(), index + len);
+                
+                // If uploading a firmware to /updates/, create .pending marker for SD-based update
+                if (uploadPath.startsWith("/updates/") && uploadPath.endsWith(".bin")) {
+                    File pendingMarker = SD.open("/updates/.pending", FILE_WRITE);
+                    if (pendingMarker) {
+                        pendingMarker.println("SD firmware update pending");
+                        pendingMarker.close();
+                        DEBUG_PRINTLN("Created /updates/.pending marker for SD-based firmware update");
+                    } else {
+                        DEBUG_PRINTLN("WARNING: Failed to create .pending marker");
+                    }
+                }
             }
         } });
 
@@ -1271,24 +1285,142 @@ void setupWebServer()
         if (err) { request->send(400, "text/plain", "invalid json"); return; }
         const char* path = doc["path"] | "";
         if (strlen(path) == 0) { request->send(400, "text/plain", "missing path"); return; }
+        
         File f = SD.open(String(path));
         if (!f) { request->send(404, "text/plain", "file not found"); return; }
-        size_t size = f.size();
-        DEBUG_PRINTF("Starting OTA from SD: %s (size=%u)\n", path, (unsigned)size);
-        if (!Update.begin(size)) { request->send(500, "text/plain", "Update.begin failed"); f.close(); return; }
-        uint8_t buf[1024];
-        size_t written = 0;
-        while (f.available()) {
-            size_t r = f.read(buf, sizeof(buf));
-            if (r <= 0) break;
-            size_t w = Update.write(buf, r);
-            written += w;
-        }
+        size_t fwSize = f.size();
         f.close();
-        if (!Update.end()) { request->send(500, "text/plain", "Update.end failed"); return; }
-        if (!Update.isFinished()) { request->send(500, "text/plain", "Update not finished"); return; }
+        
+        DEBUG_PRINTF("Starting OTA from SD using esp_ota_*: %s (size=%u)\n", path, (unsigned)fwSize);
+        
+        // Allocate chunk buffer
+        const size_t CHUNK_SIZE = 65536;  // 64KB
+        uint8_t* chunkBuffer = (uint8_t*)malloc(CHUNK_SIZE);
+        if (!chunkBuffer) {
+            request->send(500, "text/plain", "Failed to allocate buffer");
+            return;
+        }
+        
+        // Get next OTA partition
+        const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+        if (update_partition == NULL) {
+            free(chunkBuffer);
+            request->send(500, "text/plain", "No OTA partition available");
+            return;
+        }
+        
+        // Begin OTA update
+        esp_ota_handle_t ota_handle;
+        esp_err_t ota_err = esp_ota_begin(update_partition, fwSize, &ota_handle);
+        if (ota_err != ESP_OK) {
+            free(chunkBuffer);
+            request->send(500, "text/plain", String("esp_ota_begin failed: ") + esp_err_to_name(ota_err));
+            return;
+        }
+        
+        // Process firmware in chunks
+        size_t filePosition = 0;
+        bool success = true;
+        String errorMsg = "";
+        
+        while (filePosition < fwSize && success) {
+            size_t bytesToRead = min(CHUNK_SIZE, fwSize - filePosition);
+            
+            // Open file and seek to position
+            File fwFile = SD.open(String(path));
+            if (!fwFile) {
+                errorMsg = "Failed to reopen file";
+                success = false;
+                break;
+            }
+            
+            fwFile.seek(filePosition);
+            size_t bytesRead = fwFile.read(chunkBuffer, bytesToRead);
+            fwFile.close();
+            
+            if (bytesRead != bytesToRead) {
+                errorMsg = "Read error";
+                success = false;
+                break;
+            }
+            
+            // Write chunk to OTA partition
+            ota_err = esp_ota_write(ota_handle, chunkBuffer, bytesRead);
+            if (ota_err != ESP_OK) {
+                errorMsg = String("esp_ota_write failed: ") + esp_err_to_name(ota_err);
+                success = false;
+                break;
+            }
+            
+            filePosition += bytesRead;
+            yield();  // Prevent watchdog
+        }
+        
+        free(chunkBuffer);
+        
+        if (!success) {
+            esp_ota_abort(ota_handle);
+            request->send(500, "text/plain", errorMsg);
+            return;
+        }
+        
+        // Finalize OTA update
+        ota_err = esp_ota_end(ota_handle);
+        if (ota_err != ESP_OK) {
+            request->send(500, "text/plain", String("esp_ota_end failed: ") + esp_err_to_name(ota_err));
+            return;
+        }
+        
+        // Set boot partition
+        ota_err = esp_ota_set_boot_partition(update_partition);
+        if (ota_err != ESP_OK) {
+            request->send(500, "text/plain", String("esp_ota_set_boot_partition failed: ") + esp_err_to_name(ota_err));
+            return;
+        }
+        
         request->send(200, "text/plain", "Update complete, rebooting");
         delay(500);
+        ESP.restart(); });
+
+    // SD-based update: Create .pending marker and reboot (update will be applied on next boot)
+    // POST body: { "path": "/updates/firmware.bin", "version": "v1.2.3" } (version optional)
+    server.on("/apply_sd_update", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+                  // Response will be sent from body handler
+              },
+              NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+              {
+        // Parse optional version info from request body
+        String versionInfo = "Nouvelle version";
+        if (len > 0) {
+            DynamicJsonDocument doc(512);
+            DeserializationError err = deserializeJson(doc, (const char*)data, len);
+            if (!err && doc.containsKey("version")) {
+                versionInfo = doc["version"].as<String>();
+            }
+        }
+        
+        // Check if firmware.bin exists in /updates/
+        if (!SD.exists("/updates/firmware.bin")) {
+            request->send(404, "text/plain", "firmware.bin not found in /updates/");
+            return;
+        }
+        
+        // Create .pending marker file with version info
+        File pendingMarker = SD.open("/updates/.pending", FILE_WRITE);
+        if (!pendingMarker) {
+            request->send(500, "text/plain", "Failed to create .pending marker");
+            return;
+        }
+        
+        pendingMarker.println(versionInfo); // First line: version info
+        pendingMarker.println("Created: " + String(millis() / 1000) + "s since boot");
+        pendingMarker.close();
+        
+        DEBUG_PRINTF("Created .pending marker with version: %s\n", versionInfo.c_str());
+        request->send(200, "text/plain", "SD update scheduled - rebooting now");
+        
+        delay(1000);
         ESP.restart(); });
 
     // Save WiFi credentials (form POST)
@@ -1635,44 +1767,334 @@ void setup()
         }
     }
 
-    // Clean up /updates folder after successful boot (indicates OTA was successful)
-    DEBUG_PRINTLN("Cleaning up /updates folder...");
-    File updatesDir = SD.open("/updates");
-    if (updatesDir && updatesDir.isDirectory())
+    // Check for pending SD-based firmware update
+    // If /updates/.pending exists, apply firmware.bin from SD before cleanup
+    if (SD.exists("/updates/.pending"))
     {
-        File file = updatesDir.openNextFile();
-        int cleanedCount = 0;
-        while (file)
+        DEBUG_PRINTLN("Found /updates/.pending - applying SD firmware update...");
+
+        // Read version info from .pending file (optional)
+        String versionInfo = "";
+        File pendingFile = SD.open("/updates/.pending");
+        if (pendingFile)
         {
-            String fileName = String(file.name());
-            file.close();
-
-            // Delete firmware binaries (.bin files) from updates folder
-            if (fileName.endsWith(".bin"))
-            {
-                String fullPath = String("/updates/") + fileName;
-                if (SD.remove(fullPath))
-                {
-                    DEBUG_PRINTF("  Deleted: %s\n", fullPath.c_str());
-                    cleanedCount++;
-                }
-                else
-                {
-                    DEBUG_PRINTF("  Failed to delete: %s\n", fullPath.c_str());
-                }
-            }
-
-            file = updatesDir.openNextFile();
+            versionInfo = pendingFile.readStringUntil('\n');
+            pendingFile.close();
+            versionInfo.trim();
+            DEBUG_PRINTF("Update info: %s\n", versionInfo.c_str());
         }
-        updatesDir.close();
 
-        if (cleanedCount > 0)
+        // NOTE: Keep .pending file until update succeeds to avoid losing firmware.bin on crash/reboot
+
+        if (SD.exists("/updates/firmware.bin"))
         {
-            DEBUG_PRINTF("Cleaned %d firmware file(s) from /updates\n", cleanedCount);
+            File fwFile = SD.open("/updates/firmware.bin");
+            if (!fwFile)
+            {
+                DEBUG_PRINTLN("ERROR: Failed to open /updates/firmware.bin");
+                tft.fillScreen(TFT_BLACK);
+                tft.setTextColor(TFT_RED, TFT_BLACK);
+                tft.drawString("ERREUR: fichier inaccessible", 10, 10, 2);
+                delay(5000);
+            }
+            else
+            {
+                size_t fwSize = fwFile.size();
+                DEBUG_PRINTF("Firmware size: %u bytes\n", (unsigned)fwSize);
+
+                // Validate firmware size (must be reasonable)
+                if (fwSize < 100000 || fwSize > 2000000)
+                {
+                    DEBUG_PRINTF("ERROR: Invalid firmware size: %u bytes\n", (unsigned)fwSize);
+                    tft.fillScreen(TFT_BLACK);
+                    tft.setTextColor(TFT_RED, TFT_BLACK);
+                    tft.drawString("ERREUR: taille invalide", 10, 10, 2);
+                    fwFile.close();
+                    SD.remove("/updates/firmware.bin");
+                    delay(5000);
+                    ESP.restart();
+                }
+
+                // Display update warning on TFT - keep it simple, no progress
+                tft.fillScreen(TFT_BLACK);
+                tft.setTextColor(TFT_CYAN, TFT_BLACK);
+                tft.drawString("MISE A JOUR FIRMWARE", 10, 10, 2);
+                tft.setTextColor(TFT_WHITE, TFT_BLACK);
+                tft.drawString("Depuis carte SD...", 10, 40, 2);
+
+                // Display version info if available
+                if (versionInfo.length() > 0 && !versionInfo.startsWith("SD firmware"))
+                {
+                    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+                    tft.drawString(versionInfo.substring(0, 35), 10, 70, 2); // Max 35 chars
+                }
+
+                tft.setTextColor(TFT_RED, TFT_BLACK);
+                tft.drawString("NE PAS ETEINDRE !", 10, 100, 2);
+                tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+                tft.drawString("Patientez svp...", 10, 130, 2);
+
+                // Wait a few seconds so user can read the message
+                delay(3000);
+
+                // Turn off TFT completely during update (avoid SPI conflicts)
+                tft.fillScreen(TFT_BLACK);
+                digitalWrite(TFT_CS, HIGH);
+
+                DEBUG_PRINTLN("Starting firmware update from SD...");
+                DEBUG_PRINTF("Firmware size: %u bytes\n", (unsigned)fwSize);
+
+                // Strategy: Use chunked approach with buffer cache
+                // ESP32 has ~300KB free RAM, firmware is 1MB - can't load all at once
+                // Solution: Read chunks, unmount SD, write to flash, remount SD, repeat
+
+                const size_t CHUNK_SIZE = 65536; // 64KB chunks - fits comfortably in RAM
+                uint8_t *chunkBuffer = (uint8_t *)malloc(CHUNK_SIZE);
+
+                if (!chunkBuffer)
+                {
+                    DEBUG_PRINTLN("ERROR: Failed to allocate chunk buffer");
+                    tft.fillScreen(TFT_BLACK);
+                    tft.setTextColor(TFT_RED, TFT_BLACK);
+                    tft.drawString("ERREUR: memoire insuffisante", 10, 10, 2);
+                    fwFile.close();
+                    delay(10000);
+                    ESP.restart();
+                }
+
+                DEBUG_PRINTLN("Starting chunked firmware update...");
+
+                // Close file and unmount SD before OTA
+                fwFile.close();
+                SD.end();
+                SPI.end();
+                delay(200);
+
+                DEBUG_PRINTLN("Using ESP-IDF OTA API (esp_ota_*)...");
+
+                // Get next OTA partition
+                const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+                if (update_partition == NULL)
+                {
+                    DEBUG_PRINTLN("ERROR: No OTA partition available");
+                    free(chunkBuffer);
+
+                    tft.fillScreen(TFT_BLACK);
+                    tft.setTextColor(TFT_RED, TFT_BLACK);
+                    tft.drawString("ERREUR: no OTA partition", 10, 10, 2);
+                    delay(10000);
+                    ESP.restart();
+                }
+
+                DEBUG_PRINTF("Writing to partition: %s at offset 0x%x\n",
+                             update_partition->label, update_partition->address);
+
+                // Begin OTA update
+                esp_ota_handle_t ota_handle;
+                esp_err_t err = esp_ota_begin(update_partition, fwSize, &ota_handle);
+                if (err != ESP_OK)
+                {
+                    DEBUG_PRINTF("esp_ota_begin failed: %s\n", esp_err_to_name(err));
+                    free(chunkBuffer);
+
+                    tft.fillScreen(TFT_BLACK);
+                    tft.setTextColor(TFT_RED, TFT_BLACK);
+                    tft.drawString("ERREUR: OTA begin failed", 10, 10, 2);
+                    delay(10000);
+                    ESP.restart();
+                }
+
+                DEBUG_PRINTLN("OTA begin successful, processing chunks...");
+
+                // Process firmware in chunks: read from SD, write to OTA partition, repeat
+                size_t totalWritten = 0;
+                size_t filePosition = 0;
+                unsigned long lastYield = millis();
+
+                while (filePosition < fwSize)
+                {
+                    // Calculate chunk size for this iteration
+                    size_t bytesToRead = min(CHUNK_SIZE, fwSize - filePosition);
+
+                    DEBUG_PRINTF("Chunk %u: Reading %u bytes from SD (offset %u)...\n",
+                                 (unsigned)(filePosition / CHUNK_SIZE), (unsigned)bytesToRead, (unsigned)filePosition);
+
+                    // Remount SD to read chunk
+                    SPI.begin();
+                    if (!SD.begin(SD_CS_PIN, SPI))
+                    {
+                        DEBUG_PRINTLN("ERROR: Failed to remount SD");
+                        esp_ota_abort(ota_handle);
+                        free(chunkBuffer);
+                        ESP.restart();
+                    }
+
+                    // Reopen file and seek to position
+                    File fwFile = SD.open("/updates/firmware.bin");
+                    if (!fwFile)
+                    {
+                        DEBUG_PRINTLN("ERROR: Failed to reopen firmware.bin");
+                        esp_ota_abort(ota_handle);
+                        free(chunkBuffer);
+                        ESP.restart();
+                    }
+
+                    fwFile.seek(filePosition);
+                    size_t bytesRead = fwFile.read(chunkBuffer, bytesToRead);
+                    fwFile.close();
+
+                    // CRITICAL: Fully deinit SD and SPI before flash operations
+                    SD.end();
+                    SPI.end();
+                    delay(50);
+
+                    if (bytesRead != bytesToRead)
+                    {
+                        DEBUG_PRINTF("ERROR: Read %u bytes, expected %u\n", (unsigned)bytesRead, (unsigned)bytesToRead);
+                        esp_ota_abort(ota_handle);
+                        free(chunkBuffer);
+                        ESP.restart();
+                    }
+
+                    DEBUG_PRINTF("Writing %u bytes to OTA partition...\n", (unsigned)bytesRead);
+
+                    // Write chunk to OTA partition (esp_ota_write handles flash erase internally)
+                    err = esp_ota_write(ota_handle, chunkBuffer, bytesRead);
+                    if (err != ESP_OK)
+                    {
+                        DEBUG_PRINTF("esp_ota_write failed: %s\n", esp_err_to_name(err));
+                        esp_ota_abort(ota_handle);
+                        free(chunkBuffer);
+                        ESP.restart();
+                    }
+
+                    totalWritten += bytesRead;
+                    filePosition += bytesRead;
+
+                    // Yield to prevent watchdog timeout
+                    if (millis() - lastYield > 500)
+                    {
+                        yield();
+                        lastYield = millis();
+                    }
+
+                    // Log progress every chunk
+                    DEBUG_PRINTF("Progress: %u / %u bytes (%.1f%%)\n",
+                                 (unsigned)totalWritten, (unsigned)fwSize,
+                                 (float)totalWritten * 100.0 / fwSize);
+                }
+
+                // Free the chunk buffer
+                free(chunkBuffer);
+
+                DEBUG_PRINTF("OTA write complete: %u bytes written\n", (unsigned)totalWritten);
+
+                // Finalize OTA update
+                err = esp_ota_end(ota_handle);
+                if (err != ESP_OK)
+                {
+                    DEBUG_PRINTF("esp_ota_end failed: %s\n", esp_err_to_name(err));
+
+                    // Remount SD to cleanup and show error
+                    SPI.begin();
+                    SD.begin(SD_CS_PIN, SPI);
+
+                    tft.fillScreen(TFT_BLACK);
+                    tft.setTextColor(TFT_RED, TFT_BLACK);
+                    tft.drawString("ERREUR: OTA end failed", 10, 10, 2);
+                    delay(10000);
+                    ESP.restart();
+                }
+
+                // Set boot partition to the new firmware
+                err = esp_ota_set_boot_partition(update_partition);
+                if (err != ESP_OK)
+                {
+                    DEBUG_PRINTF("esp_ota_set_boot_partition failed: %s\n", esp_err_to_name(err));
+
+                    // Remount SD to cleanup and show error
+                    SPI.begin();
+                    SD.begin(SD_CS_PIN, SPI);
+
+                    tft.fillScreen(TFT_BLACK);
+                    tft.setTextColor(TFT_RED, TFT_BLACK);
+                    tft.drawString("ERREUR: set boot failed", 10, 10, 2);
+                    delay(10000);
+                    ESP.restart();
+                }
+
+                DEBUG_PRINTLN("SD firmware update SUCCESS!");
+
+                // Remount SD to cleanup
+                SPI.begin();
+                SD.begin(SD_CS_PIN, SPI);
+
+                // Show success message
+                tft.fillScreen(TFT_BLACK);
+                tft.setTextColor(TFT_GREEN, TFT_BLACK);
+                tft.drawString("MISE A JOUR REUSSIE !", 10, 10, 2);
+                tft.drawString("Redemarrage...", 10, 40, 2);
+
+                // Clean up: remove .pending and firmware.bin on success
+                SD.remove("/updates/.pending");
+                SD.remove("/updates/firmware.bin");
+                DEBUG_PRINTLN("Cleanup complete, restarting...");
+
+                delay(2000);
+                ESP.restart();
+            }
         }
         else
         {
-            DEBUG_PRINTLN("No firmware files to clean in /updates");
+            DEBUG_PRINTLN("ERROR: firmware.bin not found after .pending");
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextColor(TFT_RED, TFT_BLACK);
+            tft.drawString("ERREUR: firmware absent", 10, 10, 2);
+            delay(5000);
+            ESP.restart();
+        }
+    }
+    else
+    {
+        // No pending update - clean up old firmware files (normal behavior)
+        DEBUG_PRINTLN("No pending update - cleaning up /updates folder...");
+        File updatesDir = SD.open("/updates");
+        if (updatesDir && updatesDir.isDirectory())
+        {
+            File file = updatesDir.openNextFile();
+            int cleanedCount = 0;
+            while (file)
+            {
+                String fileName = String(file.name());
+                file.close();
+
+                // Delete firmware binaries (.bin files) from updates folder
+                if (fileName.endsWith(".bin"))
+                {
+                    String fullPath = String("/updates/") + fileName;
+                    if (SD.remove(fullPath))
+                    {
+                        DEBUG_PRINTF("  Deleted: %s\n", fullPath.c_str());
+                        cleanedCount++;
+                    }
+                    else
+                    {
+                        DEBUG_PRINTF("  Failed to delete: %s\n", fullPath.c_str());
+                    }
+                }
+
+                file = updatesDir.openNextFile();
+            }
+            updatesDir.close();
+
+            if (cleanedCount > 0)
+            {
+                DEBUG_PRINTF("Cleaned %d firmware file(s) from /updates\n", cleanedCount);
+            }
+            else
+            {
+                DEBUG_PRINTLN("No firmware files to clean in /updates");
+            }
         }
     }
 

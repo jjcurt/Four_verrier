@@ -17,11 +17,17 @@
     button:hover{background:#1976D2}
     button.danger{background:#f44336}
     button.danger:hover{background:#da190b}
+    button.success{background:#4CAF50}
+    button.success:hover{background:#45a049}
     input[type="file"]{margin:10px 0;padding:8px;border:1px solid #ddd;border-radius:4px;width:100%;max-width:400px}
     .upload-hint{color:#666;font-size:0.85em;margin-top:5px}
     .file-item{padding:10px;margin:8px 0;background:#f9f9f9;border-radius:4px;display:flex;justify-content:space-between;align-items:center}
     .file-name{font-weight:500}
     .empty{color:#999;font-style:italic;padding:10px}
+    .status-box{padding:12px;margin:10px 0;border-radius:4px;border-left:4px solid;font-size:0.9em}
+    .status-box.info{background:#E3F2FD;border-color:#2196F3;color:#0D47A1}
+    .status-box.warning{background:#FFF3E0;border-color:#FF9800;color:#E65100}
+    .status-box.success{background:#E8F5E9;border-color:#4CAF50;color:#1B5E20}
   </style>
 </head>
 <body>
@@ -57,16 +63,29 @@
 
   <div class="section">
     <h3>🔧 Mise à jour Firmware (OTA)</h3>
+    
+    <!-- Status indicator for pending SD update -->
+    <div id="sdUpdateStatus"></div>
+    
     <form id="uploadFirmwareForm" style="margin-bottom:15px">
       <input type="file" id="firmwareFileInput" name="file" accept=".bin" required>
       <button type="submit">📤 Téléverser Firmware (.bin)</button>
-      <div class="upload-hint">Téléverse le fichier .bin vers /updates/ pour mise à jour OTA</div>
+      <div class="upload-hint">Téléverse le fichier .bin vers /updates/ (crée automatiquement le marqueur .pending)</div>
     </form>
+    
     <hr style="margin:20px 0;border:none;border-top:1px solid #ddd">
-    <p style="margin-bottom:10px"><strong>Appliquer une mise à jour depuis la carte SD:</strong></p>
+    
+    <p style="margin-bottom:10px"><strong>Fichiers firmware disponibles sur carte SD:</strong></p>
     <select id="otaFiles" style="padding:8px;margin-right:10px;border-radius:4px;border:1px solid #ddd"></select>
-    <button id="applyOta" style="background:#FF9800">🚀 Appliquer OTA</button>
-    <div class="upload-hint">⚠️ L'appareil redémarrera après application du firmware</div>
+    <div style="margin-top:10px">
+      <button id="applyOta" style="background:#FF9800">⚡ Appliquer OTA Immédiat</button>
+      <button id="applySdUpdate" style="background:#4CAF50">💾 Appliquer au Redémarrage (SD)</button>
+    </div>
+    <div class="upload-hint" style="margin-top:8px">
+      <strong>⚡ OTA Immédiat:</strong> Applique la mise à jour via WiFi maintenant (risque si signal faible)<br>
+      <strong>💾 Via SD:</strong> Applique au prochain boot depuis carte SD (plus sûr, recommandé)<br>
+      ⚠️ L'appareil redémarrera dans les deux cas
+    </div>
   </div>
 
   <script>
@@ -145,11 +164,30 @@
       const data=await res.json();
       const sel=document.getElementById('otaFiles');
       sel.innerHTML='';
+      
+      // Check for .pending marker
+      const hasPending = data.includes('.pending');
+      const statusBox = document.getElementById('sdUpdateStatus');
+      
+      if(hasPending) {
+        statusBox.innerHTML = '<div class="status-box warning">⚠️ <strong>Mise à jour SD en attente</strong> - Un firmware sera appliqué au prochain redémarrage. Fichier: firmware.bin</div>';
+      } else {
+        statusBox.innerHTML = '<div class="status-box info">ℹ️ Aucune mise à jour SD en attente. Vous pouvez téléverser un nouveau firmware.</div>';
+      }
+      
       if(data.length===0){
         sel.innerHTML='<option value="">Aucun fichier disponible</option>';
         return;
       }
-      data.forEach(n=>{
+      // Filter out .pending marker from file list (not a firmware)
+      const firmwareFiles = data.filter(n => !n.startsWith('.'));
+      
+      if(firmwareFiles.length === 0) {
+        sel.innerHTML='<option value="">Aucun firmware disponible</option>';
+        return;
+      }
+      
+      firmwareFiles.forEach(n=>{
         const opt=document.createElement('option');
         opt.value=n;
         opt.textContent=n;
@@ -232,14 +270,34 @@
       }
     };
 
-    // Apply OTA update
+    // Apply OTA update (immediate via WiFi)
     document.getElementById('applyOta').onclick=async ()=>{
       const file=document.getElementById('otaFiles').value;
       if(!file) return alert('Sélectionnez un fichier firmware');
-      if(!confirm('Appliquer la mise à jour depuis '+file+'?\n\n⚠️ L\'appareil va redémarrer.\n\nContinuer?')) return;
+      if(!confirm('⚡ MISE À JOUR OTA IMMÉDIATE via WiFi\n\nFichier: '+file+'\n\n⚠️ RISQUES:\n- Échec si signal WiFi faible\n- ESP32 peut devenir inaccessible si erreur réseau\n\n✅ RECOMMANDÉ: Utiliser "Appliquer au Redémarrage (SD)" à la place\n\nContinuer quand même avec OTA immédiat?')) return;
       const res=await fetch('/apply_ota', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:'/updates/'+file})});
       const txt=await res.text();
       alert(txt);
+    }
+
+    // Apply SD update (scheduled for next boot - safer method)
+    document.getElementById('applySdUpdate').onclick=async ()=>{
+      const file=document.getElementById('otaFiles').value;
+      if(!file) return alert('Sélectionnez un fichier firmware');
+      
+      // Check if file is firmware.bin (required for SD update)
+      if(file !== 'firmware.bin') {
+        if(!confirm('⚠️ ATTENTION: Le fichier doit s\'appeler "firmware.bin"\n\nFichier sélectionné: '+file+'\n\nVoulez-vous continuer quand même?\n(La mise à jour échouera si le fichier n\'est pas nommé firmware.bin)')) {
+          return;
+        }
+      }
+      
+      if(!confirm('💾 MISE À JOUR VIA CARTE SD\n\nFichier: '+file+'\n\n✅ AVANTAGES:\n- Appliquée au prochain boot (pas de risque WiFi)\n- Retry automatique si échec\n- Plus sûr que OTA WiFi\n\nL\'ESP32 va redémarrer maintenant et appliquer la mise à jour.\n\nContinuer?')) return;
+      
+      alert('Création du marqueur .pending et redémarrage...');
+      const res=await fetch('/apply_sd_update', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})});
+      const txt=await res.text();
+      alert(txt + '\n\nL\'ESP32 redémarre. Patientez 30 secondes puis rechargez cette page.');
     }
 
     function loadAll(){

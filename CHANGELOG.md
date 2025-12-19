@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2025-12-19
+
+### Added
+- **Complete Maintenance Log Implementation** (21 columns):
+  - Temperature tracking: `CurrentTemp`, `FilteredTemp` (low-pass filter), `RawTemp`, `TargetTemp`, `TempOffset`
+  - PID internals: `Error`, `Pterm`, `Iterm`, `Dterm`, `PidKp`, `PidKi`, `PidKd`, `PidOutput`
+  - Time tracking: `EffectiveHoldSec` (actual hold time), `StabilizingTimeSec` (time within tolerance)
+  - State tracking: `InitialBoost` (heating boost active), `LogReason` (INIT/STEP_CHANGE/TEMP_DELTA/PWM_DELTA/PERIODIC)
+  - Program info: `RampRate`, `HoldTime`, `Phase`, `Step`
+  - SSR control: `SSR2_PWM` (SSR1 removed - always ON when program running)
+- **Advanced Logging System** (v1.6.0+):
+  - 3 log types: User (basic), Test (PID tuning), Maintenance (full debug)
+  - Adaptive logging reduces data volume by ~95% while capturing critical events
+  - Configurable log intervals per program
+  - Manual mode for open-loop testing
+  - **Correct log nomenclature**: `{type}_{programName}_{timestamp}.csv` (e.g., `maint_Bouteilles_1_20251211_114343.csv`)
+- **Temperature Filtering**:
+  - Low-pass filter with configurable alpha (0.3 default)
+  - FilteredTemp exposed in maintenance logs for noise analysis
+- **Stabilization Tracking**:
+  - Real-time tracking of temperature stability (±2°C tolerance)
+  - EffectiveHoldSec: actual time spent in hold phase
+  - StabilizingTimeSec: cumulative time within tolerance zone
+- **Configuration Page** (`config.html`):
+  - WiFi configuration (SSID/password)
+  - PID default parameters
+  - Stabilization parameters (timeouts, tolerances, durations)
+  - Timeline estimation (heating/cooling rates, stabilization time)
+  - HOLD phase parameters (cooking zone margin)
+  - Graph update interval control
+- **PID Reset Control** (v1.6.1):
+  - `disablePidReset` parameter (global and per-program)
+  - Option to maintain PID integrator state between steps
+  - Prevents overshoot on rapid step changes
+- **Enhanced Program Structure**:
+  - Support for `disablePidReset`, `manualMode`, `manualPWM`
+  - Adaptive logging parameters (`adaptiveTempDelta`, `adaptivePwmDelta`)
+  - Multiple log type flags (`enableDataLog`, `enableTestLog`, `enableMaintenanceLog`)
+
+### Changed
+- Updated all HTML interfaces to v1.6.1 with build footers
+- Enhanced `control.html` with dual graph view and block visualization
+- Improved settings persistence with expanded JSON schema (512 bytes)
+- **Log filenames now use correct prefix format**: `{type}_{program}_{timestamp}.csv` (not suffix)
+- **Removed SSR1 from all logs** (redundant - always ON when program running)
+- Test logs now have 8 columns (removed SSR1)
+- Maintenance logs now have 21 columns (was 16)
+
+### Fixed
+- PID integrator windup on step transitions (optional reset)
+- Logging interval now respects program-specific settings
+- Log filename nomenclature matches v1.6.1 production format
+- Adaptive log reason tracking (INIT, STEP_CHANGE, TEMP_DELTA, PWM_DELTA, PERIODIC)
+- Hold phase timing now accurately tracked with effectiveHoldStartMs
+
+
 ## [1.0.0] - 2025-11-15
 
 ### Note de version

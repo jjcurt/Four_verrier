@@ -134,14 +134,70 @@
             width: 20px;
             height: 3px;
         }
+        /* Emergency alert banner */
+        .emergency-banner {
+            display: none;
+            background: #d32f2f;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(211,47,47,0.3);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        .emergency-banner.active {
+            display: block;
+        }
+        .emergency-banner h2 {
+            margin: 0 0 10px 0;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+        }
+        .emergency-banner p {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+        .build-footer {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            padding: 4px 12px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 10px;
+            font-family: monospace;
+            border-top-left-radius: 6px;
+            z-index: 9999;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🎛️ Panneau de contrôle</h1>
+        <h1>🏛️ Panneau de contrôle</h1>
         <a href="/" class="back-link">← Retour à l'accueil</a>
     </div>
     
+    <!-- Emergency shutdown banner -->
+    <div class="emergency-banner" id="emergencyBanner">
+        <h2>⚠️ ARRÊT D'URGENCE</h2>
+        <p id="emergencyMessage">Limite de sécurité atteinte</p>
+        <p style="font-size: 0.95em; margin-top: 10px;">🔥 Relais coupés | 🚨 Attendre refroidissement | 🔄 Redémarrer l'ESP32</p>
+    </div>
+ 
+    <div class="card">
+        <h2>Contrôle des programmes</h2>
+        <select id="programSelect">
+            <option value="">Sélectionner un programme...</option>
+        </select>
+        <button class="button" id="startBtn">Démarrer</button>
+        <button class="button" id="stopBtn" disabled>Arrêter</button>
+    </div>    
     <div class="card">
         <h2>État actuel</h2>
         <div class="status">
@@ -161,27 +217,25 @@
                 <div>Étape</div>
                 <div id="stepStatus">-</div>
             </div>
+            <div>
+                <div>Temps total</div>
+                <div id="elapsedTotal">0:00</div>
+            </div>
+            <div>
+                <div>Temps étape</div>
+                <div id="elapsedStep">0:00</div>
+            </div>
         </div>
     </div>
-
-    <div class="card">
-        <h2>Contrôle des programmes</h2>
-        <select id="programSelect">
-            <option value="">Sélectionner un programme...</option>
-        </select>
-        <button class="button" id="startBtn">Démarrer</button>
-        <button class="button" id="stopBtn" disabled>Arrêter</button>
-    </div>
-
     <div class="card">
         <h2 onclick="toggleSettings()" style="cursor: pointer; user-select: none;">
-            ⚙️ Paramètres <span id="settingsToggle">▼</span>
+            ⚙️ Paramètres <span id="settingsToggle">►</span>
         </h2>
-        <div id="settingsPanel" style="display: block;">
+        <div id="settingsPanel" style="display: none;">
             <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #ddd;">
-                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">Échantillonnage</h3>
+                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">Affichage graphique</h3>
                 <label for="updateIntervalInput" style="display: block; margin-bottom: 5px;">
-                    Période: <span id="updateIntervalDisplay">1000</span> ms
+                    Rafraîchissement Web: <span id="updateIntervalDisplay">1000</span> ms
                 </label>
                 <input type="range" id="updateIntervalInput" min="100" max="10000" step="100" value="1000" 
                        style="width: 100%; margin-bottom: 5px;">
@@ -189,6 +243,11 @@
                     <span>100ms</span>
                     <span>10s</span>
                 </div>
+                <p style="font-size: 0.85em; color: #666; margin: 10px 0 0 0;">
+                    ℹ️ Contrôle uniquement le rafraîchissement de l'interface web (WebSocket).<br>
+                    Le graphe TFT utilise idleGraphUpdateInterval (voir config.html).<br>
+                    La régulation PID s'exécute toujours à 1000ms (fixe).
+                </p>
             </div>
             <div style="margin-bottom: 15px;">
                 <h3 style="margin: 10px 0 10px 0; font-size: 16px;">PID (régulateur)</h3>
@@ -203,16 +262,7 @@
                     <input type="number" id="pidKdInput" step="0.1" value="4" style="width: 100%; padding: 5px;">
                 </div>
             </div>
-            <div style="margin-bottom: 15px;">
-                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">Calibration température</h3>
-                <div style="display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;">
-                    <label for="tempOffsetInput">Offset (°C):</label>
-                    <input type="number" id="tempOffsetInput" step="0.1" value="0" style="width: 100%; padding: 5px;">
-                </div>
-                <div style="margin-top: 5px; font-size: 11px; color: #666;">
-                    ℹ️ Ajustez si le thermocouple affiche une valeur incorrecte
-                </div>
-            </div>
+
             <button class="button" id="applySettingsBtn">Appliquer les paramètres</button>
             <div style="margin-top: 10px; font-size: 11px; color: #666;">
                 ℹ️ Les paramètres sont sauvegardés sur la carte SD
@@ -220,17 +270,54 @@
         </div>
     </div>
 
-    <div class="card">
-        <h2>📊 Évolution de la température</h2>
-        <canvas id="tempGraph"></canvas>
-        <div class="graph-legend">
+     <div class="card">
+        <h2>
+            📊 Évolution de la température
+            <button id="graphToggle" class="button" style="float: right; font-size: 0.85em; padding: 5px 12px;">
+                Mode: Zoom temps réel ▼
+            </button>
+        </h2>
+        <div id="graphContainer" style="display: flex; gap: 15px; margin-top: 15px; flex-wrap: wrap;">
+            <!-- Vue globale (gauche) -->
+            <div id="overviewContainer" style="flex: 3; display: none; min-width: 300px;">
+                <h3 style="margin: 0 0 8px 0; font-size: 0.95em; color: #666;">Vue Programme - Blocs</h3>
+                <canvas id="overviewGraph" style="width: 100%; height: 300px; border: 1px solid #ddd; border-radius: 4px;"></canvas>
+                <div style="margin-top: 8px; font-size: 0.8em; color: #666; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+                    <span><span style="display: inline-block; width: 14px; height: 14px; background: #9C27B0; vertical-align: middle; border: 1px solid #333;"></span> Montée libre</span>
+                    <span><span style="display: inline-block; width: 14px; height: 14px; background: #03A9F4; vertical-align: middle; border: 1px solid #333;"></span> Rampe contrôlée</span>
+                    <span><span style="display: inline-block; width: 14px; height: 14px; background: #2196F3; vertical-align: middle; border: 1px solid #333;"></span> Maintien</span>
+                    <span><span style="display: inline-block; width: 14px; height: 14px; background: linear-gradient(to bottom, #F44336, #FF9800, #4CAF50); vertical-align: middle; border: 1px solid #333;"></span> Refroidissement</span>
+                    <span><span style="display: inline-block; width: 14px; height: 14px; background: #4CAF50; vertical-align: middle; border: 1px solid #333;"></span> Stable ±10°C</span>
+                    <span><span style="display: inline-block; width: 14px; height: 14px; background: #FF5722; vertical-align: middle; border: 1px solid #333;"></span> Surchauffe</span>
+                    <span style="font-style: italic;">*Maintiens >30min compressés</span>
+                </div>
+            </div>
+            
+            <!-- Séparateur vertical -->
+            <div id="graphSeparator" style="width: 2px; background: #ddd; display: none;"></div>
+            
+            <!-- Zoom temps réel (droite) -->
+            <div id="realtimeContainer" style="flex: 2; min-width: 300px;">
+                <h3 id="realtimeGraphTitle" style="margin: 0 0 8px 0; font-size: 0.95em; color: #666;">Zoom Temps Réel (5 min)</h3>
+                <canvas id="tempGraph" style="width: 100%; height: 100%; border: 1px solid #ddd; border-radius: 4px;"></canvas>
+            </div>
+        </div>
+        <div class="graph-legend" style="margin-top: 10px;">
             <div class="legend-item">
                 <div class="legend-color" style="background:#4CAF50"></div>
-                <span>Température actuelle</span>
+                <span>Température mesurée</span>
             </div>
             <div class="legend-item">
-                <div class="legend-color" style="background:#2196F3; border: 2px dashed #2196F3; height:0"></div>
-                <span>Température cible</span>
+                <div class="legend-color" style="background:#2196F3"></div>
+                <span>Consigne réelle (PID)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background:#999; border: 2px dashed #999; height:0"></div>
+                <span>Consigne théorique (programme)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background:rgba(255,152,0,0.3)"></div>
+                <span>Zone compensation lead (45s)</span>
             </div>
         </div>
     </div>
@@ -261,26 +348,165 @@
         let ws = null;
         let tempHistory = []; // Array of {time: seconds, temp: value}
         let targetHistory = []; // Array of {time: seconds, target: value}
-        const MAX_HISTORY = 300; // 5 minutes at 1s intervals
+        let overviewHistory = []; // Reduced sampling for overview (1 pt / 20s)
+        let lastOverviewSample = 0;
+        let programSteps = []; // Program steps for overview rendering
+        const MAX_HISTORY = 300; // 300 points max (durée = 300 × updateInterval, ex: 5min à 1s)
+        const LEAD_COMPENSATION_SECONDS = 18; // Match firmware SYSTEM_DELAY_SECONDS (measured from open-loop tests)
+
+        // Timeline estimation parameters (loaded from settings.json, v1.4.9)
+        let estimatedHeatingRate = 39.0;   // Default: free heating rate (°C/min)
+        let estimatedCoolingRate = 21.0;   // Default: natural cooling rate (°C/min)
+        let estimatedStabilizationTime = 3.0; // Default: stabilization time (minutes)
+        
+        // Client-side elapsed time tracking (independent from firmware elapsedSeconds)
+        let clientStartTime = null; // Set when program starts or page loads
+        let lastDataAddTime = 0; // Track when last data point was added to graph (for throttling)
+
         let canvas, ctx;
+        let canvasOverview, ctxOverview;
         let lastGraphUpdate = 0;
-    // Prevent telemetry from overwriting user's slider while editing
-    let userEditingInterval = false;
+        let lastProgramState = 0; // Track program running state for history reset
+        let graphMode = 'realtime'; // 'dual' | 'overview' | 'realtime'
+        let blockViewTimer = null; // Timer for block view animation (v1.5.0)
+        // Prevent telemetry from overwriting user's slider while editing
+        let userEditingInterval = false;
+
+        // Format seconds to MM:SS or HH:MM:SS
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            
+            if (h > 0) {
+                return `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+            }
+            return `${m}:${s.toString().padStart(2,'0')}`;
+        }
+
+        // Toggle graph display mode
+        function toggleGraphMode() {
+            const modes = ['realtime', 'dual', 'overview'];
+            const labels = ['Zoom temps réel', 'Double vue', 'Vue programme'];
+            let idx = modes.indexOf(graphMode);
+            idx = (idx + 1) % 3;
+            graphMode = modes[idx];
+            
+            document.getElementById('graphToggle').innerHTML = `Mode: ${labels[idx]} ▼`;
+            updateGraphLayout();
+        }
+
+        // Update graph container layout based on mode
+        function updateGraphLayout() {
+            const overviewContainer = document.getElementById('overviewContainer');
+            const realtimeContainer = document.getElementById('realtimeContainer');
+            const separator = document.getElementById('graphSeparator');
+            
+            if (graphMode === 'dual') {
+                overviewContainer.style.flex = '3';
+                realtimeContainer.style.flex = '2';
+                separator.style.display = 'block';
+                overviewContainer.style.display = 'block';
+                realtimeContainer.style.display = 'block';
+            } else if (graphMode === 'overview') {
+                overviewContainer.style.flex = '1';
+                realtimeContainer.style.display = 'none';
+                separator.style.display = 'none';
+                overviewContainer.style.display = 'block';
+            } else { // realtime
+                overviewContainer.style.display = 'none';
+                separator.style.display = 'none';
+                realtimeContainer.style.flex = '1';
+                realtimeContainer.style.display = 'block';
+            }
+            
+            // Wait for browser to apply flex changes, THEN resize canvases
+            requestAnimationFrame(() => {
+                if (canvas) {
+                    canvas.width = canvas.offsetWidth;
+                    canvas.height = 300;
+                }
+                if (canvasOverview && graphMode !== 'realtime') {
+                    canvasOverview.width = canvasOverview.offsetWidth;
+                    canvasOverview.height = 300;
+                }
+                
+                drawGraphs();
+            });
+        }
 
         // Initialize canvas
         window.onload = function() {
             canvas = document.getElementById('tempGraph');
             ctx = canvas.getContext('2d');
-            // Set canvas size
+            canvasOverview = document.getElementById('overviewGraph');
+            ctxOverview = canvasOverview.getContext('2d');
+            
+            // Load timeline estimation parameters from settings.json (v1.4.9)
+            fetch('/settings.json')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.estimatedHeatingRate !== undefined) {
+                        estimatedHeatingRate = parseFloat(data.estimatedHeatingRate);
+                        console.log('[TIMELINE] Loaded estimatedHeatingRate:', estimatedHeatingRate, '°C/min');
+                    }
+                    if (data.estimatedCoolingRate !== undefined) {
+                        estimatedCoolingRate = parseFloat(data.estimatedCoolingRate);
+                        console.log('[TIMELINE] Loaded estimatedCoolingRate:', estimatedCoolingRate, '°C/min');
+                    }
+                    if (data.estimatedStabilizationTime !== undefined) {
+                        estimatedStabilizationTime = parseFloat(data.estimatedStabilizationTime);
+                        console.log('[TIMELINE] Loaded estimatedStabilizationTime:', estimatedStabilizationTime, 'min');
+                    }
+                })
+                .catch(error => {
+                    console.warn('[TIMELINE] Could not load settings.json, using defaults:', error);
+                });
+            
+            // Set canvas sizes
             canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
+            canvas.height = 300;
+            canvasOverview.width = canvasOverview.offsetWidth;
+            canvasOverview.height = 300;
+            
             // Initial draw
-            drawGraph();
+            drawGraphs();
             // Load programs
             loadPrograms();
             // Setup settings controls
             setupSettingsControls();
+            // Setup graph toggle
+            document.getElementById('graphToggle').onclick = toggleGraphMode;
+            // Setup program preview
+            setupProgramPreview();
+            
+            // Initialize realtime graph title with default interval (1000ms)
+            updateRealtimeGraphTitle(1000);
         };
+
+        // Update realtime graph title with calculated duration based on updateInterval
+        function updateRealtimeGraphTitle(intervalMs) {
+            const totalSeconds = (MAX_HISTORY * intervalMs) / 1000;
+            const minutes = Math.round(totalSeconds / 60);
+            let durationText;
+            
+            if (minutes < 60) {
+                durationText = minutes + ' min';
+            } else {
+                const hours = Math.floor(minutes / 60);
+                const remainingMinutes = minutes % 60;
+                if (remainingMinutes === 0) {
+                    durationText = hours + 'h';
+                } else {
+                    durationText = hours + 'h' + remainingMinutes.toString().padStart(2, '0');
+                }
+            }
+            
+            const titleElement = document.getElementById('realtimeGraphTitle');
+            if (titleElement) {
+                titleElement.textContent = 'Zoom Temps Réel (' + durationText + ')';
+            }
+        }
 
         // Toggle settings panel visibility
         function toggleSettings() {
@@ -295,6 +521,30 @@
             }
         }
 
+        // Update realtime graph title with calculated duration based on updateInterval
+        function updateRealtimeGraphTitle(intervalMs) {
+            const totalSeconds = (MAX_HISTORY * intervalMs) / 1000;
+            const minutes = Math.round(totalSeconds / 60);
+            let durationText;
+            
+            if (minutes < 60) {
+                durationText = minutes + ' min';
+            } else {
+                const hours = Math.floor(minutes / 60);
+                const remainingMinutes = minutes % 60;
+                if (remainingMinutes === 0) {
+                    durationText = hours + 'h';
+                } else {
+                    durationText = hours + 'h' + remainingMinutes.toString().padStart(2, '0');
+                }
+            }
+            
+            const titleElement = document.getElementById('realtimeGraphTitle');
+            if (titleElement) {
+                titleElement.textContent = 'Zoom Temps Réel (' + durationText + ')';
+            }
+        }
+
         // Setup settings controls
         function setupSettingsControls() {
             const slider = document.getElementById('updateIntervalInput');
@@ -305,11 +555,11 @@
             const pidKpInput = document.getElementById('pidKpInput');
             const pidKiInput = document.getElementById('pidKiInput');
             const pidKdInput = document.getElementById('pidKdInput');
-            const tempOffsetInput = document.getElementById('tempOffsetInput');
             
             // Update display when slider moves
             slider.oninput = function() {
                 display.textContent = this.value;
+                updateRealtimeGraphTitle(parseInt(this.value));
                 userEditingInterval = true; // user is interacting; don't override
             };
             // Mark editing when pointer/touch begins
@@ -317,7 +567,7 @@
             slider.addEventListener('touchstart', () => { userEditingInterval = true; }, { passive: true });
             
             // Mark editing when user focuses on any input field
-            [pidKpInput, pidKiInput, pidKdInput, tempOffsetInput].forEach(input => {
+            [pidKpInput, pidKiInput, pidKdInput].forEach(input => {
                 input.addEventListener('focus', () => { userEditingInterval = true; });
                 input.addEventListener('input', () => { userEditingInterval = true; });
             });
@@ -328,17 +578,16 @@
                 const kp = parseFloat(pidKpInput.value);
                 const ki = parseFloat(pidKiInput.value);
                 const kd = parseFloat(pidKdInput.value);
-                const offset = parseFloat(tempOffsetInput.value);
                 
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
                         updateInterval: newInterval,
                         pidKp: kp,
                         pidKi: ki,
-                        pidKd: kd,
-                        tempOffset: offset
+                        pidKd: kd
                     }));
-                    console.log('Settings applied:', {interval: newInterval, Kp: kp, Ki: ki, Kd: kd, offset: offset});
+                    updateRealtimeGraphTitle(newInterval);
+                    console.log('Settings applied:', {interval: newInterval, Kp: kp, Ki: ki, Kd: kd});
                     userEditingInterval = false;
                 } else {
                     alert('WebSocket non connecté');
@@ -351,10 +600,19 @@
             if (canvas) {
                 canvas.width = canvas.offsetWidth;
                 canvas.height = canvas.offsetHeight;
-                drawGraph();
+                drawGraphs();
             }
         };
 
+        // Master draw function for both graphs
+        function drawGraphs() {
+            drawGraph(); // Realtime graph
+            if (graphMode !== 'realtime') {
+                drawBlockView(); // Block view v1.5.0 (replaces drawOverviewGraph)
+            }
+        }
+
+        // Draw realtime graph (existing function)
         function drawGraph() {
             if (!ctx || tempHistory.length === 0) {
                 // Draw empty graph
@@ -378,9 +636,13 @@
             ctx.fillRect(0, 0, width, height);
 
             // Find min/max temperatures and time range
-            const temps = tempHistory.map(d => d.temp).concat(targetHistory.map(d => d.target));
-            let minTemp = Math.min(...temps);
-            let maxTemp = Math.max(...temps);
+            // Filter out invalid values (NaN, undefined, null) before calculating min/max
+            const temps = tempHistory.map(d => d.temp)
+                .concat(targetHistory.map(d => d.target))
+                .filter(t => typeof t === 'number' && !isNaN(t) && isFinite(t) && t >= 0 && t <= 1000);
+            
+            let minTemp = temps.length > 0 ? Math.min(...temps) : 0;
+            let maxTemp = temps.length > 0 ? Math.max(...temps) : 100;
             const tempRange = maxTemp - minTemp;
             if (tempRange < 10) {
                 minTemp -= 5;
@@ -391,10 +653,30 @@
                 maxTemp += padding_temp;
             }
 
-            // Time range from data
-            const minTime = Math.min(...tempHistory.map(d => d.time));
-            const maxTime = Math.max(...tempHistory.map(d => d.time));
-            const timeRange = maxTime - minTime;
+            // Time range: fixed window based on updateInterval and MAX_HISTORY
+            // Graph shows last N points, each separated by updateInterval
+            const currentInterval = parseInt(document.getElementById('updateIntervalInput').value) || 1000;
+            const maxVisibleDuration = (MAX_HISTORY * currentInterval) / 1000; // seconds
+            
+            // Hybrid window: fill left-to-right until maxVisibleDuration, then slide
+            const actualMaxTime = tempHistory.length > 0 ? Math.max(...tempHistory.map(d => d.time)) : 0;
+            let minTime, maxTime;
+            
+            if (actualMaxTime <= maxVisibleDuration) {
+                // Phase 1: Fill mode (0 to maxVisibleDuration)
+                // Curve fills from left to right, X-axis stays fixed
+                minTime = 0;
+                maxTime = maxVisibleDuration;
+            } else {
+                // Phase 2: Scroll mode (sliding window)
+                // Show last maxVisibleDuration seconds
+                minTime = actualMaxTime - maxVisibleDuration;
+                maxTime = actualMaxTime;
+            }
+            
+            const timeRange = Math.max(1, maxTime - minTime); // Ensure non-zero range
+            
+            console.log('[DRAW] Time range:', minTime.toFixed(1) + 's →', maxTime.toFixed(1) + 's', '(window:', maxVisibleDuration.toFixed(0) + 's, actualMax:', actualMaxTime.toFixed(1) + 's)', 'tempHistory:', tempHistory.length, 'targetHistory:', targetHistory.length);
 
             // Draw axes
             ctx.strokeStyle = '#333';
@@ -426,27 +708,78 @@
                 ctx.stroke();
             }
 
-            // Draw X-axis labels (absolute time)
+            // Draw X-axis labels: dual scale (relative top + absolute program time bottom)
             ctx.textAlign = 'center';
             const xTicks = 5;
+            
+            // Top labels: relative time (0 to maxVisibleDuration)
+            ctx.fillStyle = '#999';
+            ctx.font = '10px Arial';
             for (let i = 0; i <= xTicks; i++) {
-                const seconds = minTime + (timeRange * i / xTicks);
+                const relativeSeconds = (maxVisibleDuration * i / xTicks);
                 const x = padding.left + (graphWidth * i / xTicks);
                 
                 let label;
-                if (seconds < 60) {
-                    label = Math.floor(seconds) + 's';
-                } else if (seconds < 3600) {
-                    const mins = Math.floor(seconds / 60);
-                    const secs = Math.floor(seconds % 60);
+                if (relativeSeconds < 60) {
+                    label = Math.floor(relativeSeconds) + 's';
+                } else if (relativeSeconds < 3600) {
+                    const mins = Math.floor(relativeSeconds / 60);
+                    const secs = Math.floor(relativeSeconds % 60);
                     label = mins + ':' + (secs < 10 ? '0' : '') + secs;
                 } else {
-                    const hours = Math.floor(seconds / 3600);
-                    const mins = Math.floor((seconds % 3600) / 60);
+                    const hours = Math.floor(relativeSeconds / 3600);
+                    const mins = Math.floor((relativeSeconds % 3600) / 60);
                     label = hours + 'h' + (mins < 10 ? '0' : '') + mins;
                 }
                 
-                ctx.fillText(label, x, height - padding.bottom + 20);
+                ctx.fillText(label, x, padding.top - 5);
+            }
+            
+            // Bottom labels: absolute program time (if program running)
+            ctx.fillStyle = '#666';
+            ctx.font = '11px Arial';
+            if (clientStartTime) {
+                // Program is running, show absolute timestamps
+                for (let i = 0; i <= xTicks; i++) {
+                    const timeOffset = minTime + (timeRange * i / xTicks);
+                    const absoluteSeconds = timeOffset;
+                    const x = padding.left + (graphWidth * i / xTicks);
+                    
+                    // Format as HH:MM:SS
+                    const h = Math.floor(absoluteSeconds / 3600);
+                    const m = Math.floor((absoluteSeconds % 3600) / 60);
+                    const s = Math.floor(absoluteSeconds % 60);
+                    
+                    let label;
+                    if (h > 0) {
+                        label = h + ':' + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+                    } else {
+                        label = m + ':' + s.toString().padStart(2, '0');
+                    }
+                    
+                    ctx.fillText(label, x, height - padding.bottom + 20);
+                }
+            } else {
+                // No program running, show relative time only (bottom)
+                for (let i = 0; i <= xTicks; i++) {
+                    const relativeSeconds = (maxVisibleDuration * i / xTicks);
+                    const x = padding.left + (graphWidth * i / xTicks);
+                    
+                    let label;
+                    if (relativeSeconds < 60) {
+                        label = Math.floor(relativeSeconds) + 's';
+                    } else if (relativeSeconds < 3600) {
+                        const mins = Math.floor(relativeSeconds / 60);
+                        const secs = Math.floor(relativeSeconds % 60);
+                        label = mins + ':' + (secs < 10 ? '0' : '') + secs;
+                    } else {
+                        const hours = Math.floor(relativeSeconds / 3600);
+                        const mins = Math.floor((relativeSeconds % 3600) / 60);
+                        label = hours + 'h' + (mins < 10 ? '0' : '') + mins;
+                    }
+                    
+                    ctx.fillText(label, x, height - padding.bottom + 20);
+                }
             }
 
             // Helper function to convert temp to Y coordinate
@@ -462,20 +795,30 @@
                 return padding.left + (normalized * graphWidth);
             }
 
-            // Draw target temperature line (dashed blue)
+            // Draw target temperature line (solid blue - real setpoint with lead compensation)
             if (targetHistory.length > 1) {
                 ctx.strokeStyle = '#2196F3';
                 ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
                 ctx.beginPath();
+                let firstPoint = true;
+                let drawnPoints = 0;
                 targetHistory.forEach((d, i) => {
-                    const x = timeToX(d.time);
-                    const y = tempToY(d.target);
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
+                    // Only draw points within visible window
+                    if (d.time >= minTime && d.time <= maxTime) {
+                        const x = timeToX(d.time);
+                        const y = tempToY(d.target);
+                        if (firstPoint) {
+                            ctx.moveTo(x, y);
+                            firstPoint = false;
+                            console.log('[DRAW] Target FIRST point:', d.time.toFixed(1) + 's', d.target.toFixed(1) + '°C', '→ x:', x.toFixed(0), 'y:', y.toFixed(0));
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                        drawnPoints++;
+                    }
                 });
                 ctx.stroke();
-                ctx.setLineDash([]);
+                console.log('[DRAW] Target curve: drew', drawnPoints, '/', targetHistory.length, 'points');
             }
 
             // Draw current temperature line (solid green)
@@ -483,13 +826,25 @@
                 ctx.strokeStyle = '#4CAF50';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
+                let firstPoint = true;
+                let drawnPoints = 0;
                 tempHistory.forEach((d, i) => {
-                    const x = timeToX(d.time);
-                    const y = tempToY(d.temp);
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
+                    // Only draw points within visible window
+                    if (d.time >= minTime && d.time <= maxTime) {
+                        const x = timeToX(d.time);
+                        const y = tempToY(d.temp);
+                        if (firstPoint) {
+                            ctx.moveTo(x, y);
+                            firstPoint = false;
+                            console.log('[DRAW] Temp FIRST point:', d.time.toFixed(1) + 's', d.temp.toFixed(1) + '°C', '→ x:', x.toFixed(0), 'y:', y.toFixed(0));
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                        drawnPoints++;
+                    }
                 });
                 ctx.stroke();
+                console.log('[DRAW] Temp curve: drew', drawnPoints, '/', tempHistory.length, 'points');
             }
 
             // Draw current point marker
@@ -502,6 +857,865 @@
                 ctx.beginPath();
                 ctx.arc(x, y, 5, 0, 2 * Math.PI);
                 ctx.fill();
+            }
+        }
+
+        // Draw overview graph (full program timeline)
+        function drawOverviewGraph() {
+            if (!ctxOverview) return;
+            
+            console.log('[OVERVIEW] Drawing, programSteps:', programSteps?.length, 'overviewHistory:', overviewHistory?.length);
+            
+            const width = canvasOverview.width;
+            const height = canvasOverview.height;
+            const padding = { top: 25, right: 20, bottom: 40, left: 60 };
+            const graphWidth = width - padding.left - padding.right;
+            const graphHeight = height - padding.top - padding.bottom;
+
+            // Clear canvas
+            ctxOverview.fillStyle = '#fafafa';
+            ctxOverview.fillRect(0, 0, width, height);
+
+            // Check if we have program data (allow empty overviewHistory for preview)
+            if (!programSteps || programSteps.length === 0) {
+                ctxOverview.fillStyle = '#999';
+                ctxOverview.font = '14px Arial';
+                ctxOverview.textAlign = 'center';
+                ctxOverview.fillText('En attente du programme...', width/2, height/2);
+                return;
+            }
+
+            // Calculate temperature range from program steps and current data
+            // Filter out invalid values (NaN, undefined, null) to avoid aberrant graduations
+            const programTemps = programSteps.map(s => s.targetTemp).filter(t => typeof t === 'number' && !isNaN(t) && isFinite(t));
+            const currentTemps = overviewHistory.map(d => d.temp).filter(t => typeof t === 'number' && !isNaN(t) && isFinite(t));
+            
+            // Determine starting temperature (v1.4.9 fix)
+            let startingTemp = 25; // Default ambient
+            if (overviewHistory.length > 0 && typeof overviewHistory[overviewHistory.length - 1].temp === 'number') {
+                startingTemp = overviewHistory[overviewHistory.length - 1].temp;
+            } else if (tempHistory.length > 0 && typeof tempHistory[tempHistory.length - 1].temp === 'number') {
+                startingTemp = tempHistory[tempHistory.length - 1].temp;
+            }
+            
+            // Include starting temperature in range calculation to avoid curve going off-screen
+            const allTemps = programTemps.concat(currentTemps).concat([startingTemp]);
+            
+            let minTemp = allTemps.length > 0 ? Math.min(...allTemps) : 0;
+            let maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : 100;
+            const tempRange = maxTemp - minTemp;
+            if (tempRange < 10) {
+                minTemp -= 5;
+                maxTemp += 5;
+            } else {
+                const padding_temp = tempRange * 0.1;
+                minTemp -= padding_temp;
+                maxTemp += padding_temp;
+            }
+
+            // Calculate durations: separate natural cooling from active phases
+            let activeDuration = 0;
+            let naturalCoolingDuration = 0;
+            
+            console.log('[OVERVIEW] programSteps details:', JSON.stringify(programSteps, null, 2));
+            
+            // Check if programSteps has the enriched format (from preview)
+            const hasEnrichedData = programSteps[0]?.rampDuration !== undefined;
+            
+            if (!hasEnrichedData) {
+                // programSteps came from WebSocket without rampDuration/isNaturalCooling
+                // Reconstruct missing fields using configurable timeline parameters (v1.4.9)
+                // Start from actual furnace temperature if available (v1.4.9 fix)
+                let previousTemp = 25;
+                if (overviewHistory.length > 0 && typeof overviewHistory[overviewHistory.length - 1].temp === 'number') {
+                    previousTemp = overviewHistory[overviewHistory.length - 1].temp;
+                } else if (tempHistory.length > 0 && typeof tempHistory[tempHistory.length - 1].temp === 'number') {
+                    previousTemp = tempHistory[tempHistory.length - 1].temp;
+                }
+                
+                programSteps = programSteps.map((step, index) => {
+                    const startTime = index === 0 ? 0 : programSteps[index - 1].endTime;
+                    const deltaT = step.targetTemp - previousTemp;
+                    let rampDuration = 0;
+                    let isNaturalCooling = false;
+                    
+                    if (step.withRamp && step.rampRate > 0) {
+                        // Active ramp with specified rate
+                        rampDuration = Math.abs(deltaT) / step.rampRate;
+                    } else if (!step.withRamp && deltaT > 0) {
+                        // Free heating (no active control)
+                        rampDuration = Math.abs(deltaT) / estimatedHeatingRate;
+                        console.log('[TIMELINE] Free heating:', deltaT, '°C at', estimatedHeatingRate, '°C/min =', rampDuration.toFixed(1), 'min');
+                    } else if (!step.withRamp && deltaT < 0) {
+                        // Natural cooling (passive)
+                        rampDuration = Math.abs(deltaT) / estimatedCoolingRate;
+                        isNaturalCooling = true;
+                        console.log('[TIMELINE] Natural cooling:', Math.abs(deltaT), '°C at', estimatedCoolingRate, '°C/min =', rampDuration.toFixed(1), 'min');
+                    }
+                    // Add estimated stabilization time to total (v1.4.9)
+                    rampDuration += estimatedStabilizationTime;
+                    
+                    previousTemp = step.targetTemp;
+                    
+                    return {
+                        ...step,
+                        startTime: startTime,
+                        rampDuration: rampDuration,
+                        isNaturalCooling: isNaturalCooling
+                    };
+                });
+                
+                console.log('[OVERVIEW] Reconstructed programSteps:', programSteps);
+            }
+            
+            programSteps.forEach(step => {
+                console.log('[OVERVIEW] Processing step:', step, 'rampDuration:', step.rampDuration, 'holdTime:', step.holdTime, 'isNaturalCooling:', step.isNaturalCooling);
+                if (step.isNaturalCooling) {
+                    naturalCoolingDuration += (step.rampDuration || 0);
+                } else {
+                    activeDuration += (step.rampDuration || 0);
+                }
+                activeDuration += (step.holdTime || 0); // Hold is always "active"
+            });
+            
+            const totalDuration = activeDuration + naturalCoolingDuration;
+            const hasNaturalCooling = naturalCoolingDuration > 0;
+            
+            // Prevent division by zero
+            if (activeDuration === 0) activeDuration = 0.01;
+            if (totalDuration === 0) {
+                console.error('[OVERVIEW] Total duration is 0, cannot draw graph');
+                return;
+            }
+            
+            console.log('[OVERVIEW] Durations - Active:', activeDuration, 'Cooling:', naturalCoolingDuration, 'Total:', totalDuration);
+            
+            // Allocate graph width: 80% for active phases, 20% for natural cooling (if present)
+            const activeWidthRatio = hasNaturalCooling ? 0.80 : 1.0;
+            const coolingWidthRatio = hasNaturalCooling ? 0.20 : 0.0;
+
+            // Helper functions with compressed time scale
+            function tempToY(temp) {
+                const normalized = (temp - minTemp) / (maxTemp - minTemp);
+                return height - padding.bottom - (normalized * graphHeight);
+            }
+
+            function timeToX(minutes) {
+                // Build cumulative time boundaries for compression
+                let accumulatedActive = 0;
+                let accumulatedCooling = 0;
+                let targetFound = false;
+                let pixelX = padding.left;
+                
+                for (let step of programSteps) {
+                    const stepStart = accumulatedActive + accumulatedCooling;
+                    const stepEnd = stepStart + step.rampDuration + step.holdTime;
+                    
+                    if (minutes <= stepEnd) {
+                        // Target is within this step
+                        const offsetInStep = minutes - stepStart;
+                        
+                        if (step.isNaturalCooling && offsetInStep <= step.rampDuration) {
+                            // Within natural cooling ramp
+                            const coolingProgress = offsetInStep / step.rampDuration;
+                            const coolingSegmentWidth = graphWidth * coolingWidthRatio;
+                            const coolingStartX = padding.left + (accumulatedActive / activeDuration) * graphWidth * activeWidthRatio;
+                            pixelX = coolingStartX + coolingProgress * coolingSegmentWidth;
+                        } else {
+                            // Within active phase (ramp or hold)
+                            const activeOffset = step.isNaturalCooling ? (offsetInStep - step.rampDuration) : offsetInStep;
+                            const activeInStep = step.isNaturalCooling ? step.holdTime : (step.rampDuration + step.holdTime);
+                            const activeProgress = activeOffset / activeInStep;
+                            const stepActiveStart = (accumulatedActive / activeDuration) * graphWidth * activeWidthRatio;
+                            const stepActiveWidth = (activeInStep / activeDuration) * graphWidth * activeWidthRatio;
+                            pixelX = padding.left + stepActiveStart + activeProgress * stepActiveWidth;
+                        }
+                        targetFound = true;
+                        break;
+                    }
+                    
+                    // Accumulate for next iteration
+                    if (step.isNaturalCooling) {
+                        accumulatedCooling += step.rampDuration;
+                    } else {
+                        accumulatedActive += step.rampDuration;
+                    }
+                    accumulatedActive += step.holdTime;
+                }
+                
+                if (!targetFound) {
+                    // Beyond last step, extrapolate
+                    pixelX = padding.left + graphWidth;
+                }
+                
+                return pixelX;
+            }
+
+            // Draw axes
+            ctxOverview.strokeStyle = '#333';
+            ctxOverview.lineWidth = 2;
+            ctxOverview.beginPath();
+            ctxOverview.moveTo(padding.left, padding.top);
+            ctxOverview.lineTo(padding.left, height - padding.bottom);
+            ctxOverview.lineTo(width - padding.right, height - padding.bottom);
+            ctxOverview.stroke();
+
+            // Draw Y-axis labels and grid
+            ctxOverview.fillStyle = '#666';
+            ctxOverview.font = '12px Arial';
+            ctxOverview.textAlign = 'right';
+            ctxOverview.strokeStyle = '#ddd';
+            ctxOverview.lineWidth = 1;
+            const yTicks = 5;
+            for (let i = 0; i <= yTicks; i++) {
+                const temp = minTemp + (maxTemp - minTemp) * i / yTicks;
+                const y = height - padding.bottom - (graphHeight * i / yTicks);
+                ctxOverview.fillText(temp.toFixed(0) + '°C', padding.left - 10, y + 4);
+                ctxOverview.beginPath();
+                ctxOverview.moveTo(padding.left, y);
+                ctxOverview.lineTo(width - padding.right, y);
+                ctxOverview.stroke();
+            }
+
+            // Draw X-axis labels (time in minutes) - adapted for compressed scale
+            ctxOverview.textAlign = 'center';
+            const xTicks = 5;
+            
+            // Calculate time labels based on compressed scale
+            for (let i = 0; i <= xTicks; i++) {
+                const ratio = i / xTicks;
+                let timeMinutes = 0;
+                
+                if (ratio <= activeWidthRatio || !hasNaturalCooling) {
+                    // Within active phase portion
+                    timeMinutes = (ratio / activeWidthRatio) * activeDuration;
+                } else {
+                    // Within compressed cooling portion
+                    const coolingRatio = (ratio - activeWidthRatio) / coolingWidthRatio;
+                    timeMinutes = activeDuration + coolingRatio * naturalCoolingDuration;
+                }
+                
+                const x = padding.left + ratio * graphWidth;
+                const label = timeMinutes < 60 
+                    ? Math.floor(timeMinutes) + 'min'
+                    : (timeMinutes / 60).toFixed(1) + 'h';
+                ctxOverview.fillText(label, x, height - padding.bottom + 20);
+            }
+
+            // Draw program steps with separate ramp and hold phases
+            // Start from actual furnace temperature if available (v1.4.9 fix)
+            let currentTemp = 25; // Default ambient
+            if (overviewHistory.length > 0 && typeof overviewHistory[overviewHistory.length - 1].temp === 'number') {
+                currentTemp = overviewHistory[overviewHistory.length - 1].temp;
+            } else if (tempHistory.length > 0 && typeof tempHistory[tempHistory.length - 1].temp === 'number') {
+                currentTemp = tempHistory[tempHistory.length - 1].temp;
+            }
+            
+            programSteps.forEach((step, i) => {
+                const startTime = step.startTime;
+                const rampEndTime = startTime + step.rampDuration;
+                const holdEndTime = step.endTime;
+                const targetTemp = step.targetTemp;
+                
+                // Draw ramp phase if present
+                if (step.rampDuration > 0) {
+                    const x1 = timeToX(startTime);
+                    const x2 = timeToX(rampEndTime);
+                    const y1 = tempToY(currentTemp);
+                    const y2 = tempToY(targetTemp);
+                    
+                    // Draw lead compensation zone (first 45s of ramp, orange highlight)
+                    if (!step.isNaturalCooling && step.rampDuration > 0) {
+                        const leadDurationMin = LEAD_COMPENSATION_SECONDS / 60.0;
+                        const leadEndTime = Math.min(startTime + leadDurationMin, rampEndTime);
+                        const xLead = timeToX(leadEndTime);
+                        ctxOverview.fillStyle = 'rgba(255, 152, 0, 0.2)';
+                        ctxOverview.fillRect(x1, padding.top, xLead - x1, graphHeight);
+                        
+                        // Draw vertical dashed line at end of lead compensation
+                        if (leadEndTime < rampEndTime) {
+                            ctxOverview.strokeStyle = 'rgba(255, 152, 0, 0.6)';
+                            ctxOverview.setLineDash([3, 3]);
+                            ctxOverview.lineWidth = 1;
+                            ctxOverview.beginPath();
+                            ctxOverview.moveTo(xLead, padding.top);
+                            ctxOverview.lineTo(xLead, padding.top + graphHeight);
+                            ctxOverview.stroke();
+                            ctxOverview.setLineDash([]);
+                        }
+                    }
+                    
+                    // Draw lead compensation zone (first 45s of ramp, orange highlight)
+                    if (!step.isNaturalCooling && step.rampDuration > 0) {
+                        const leadDurationMin = LEAD_COMPENSATION_SECONDS / 60.0;
+                        const leadEndTime = Math.min(startTime + leadDurationMin, rampEndTime);
+                        const xLead = timeToX(leadEndTime);
+                        ctxOverview.fillStyle = 'rgba(255, 152, 0, 0.15)';
+                        ctxOverview.fillRect(x1, padding.top, xLead - x1, graphHeight);
+                        
+                        // Draw vertical dashed line at end of lead compensation
+                        if (leadEndTime < rampEndTime) {
+                            ctxOverview.strokeStyle = 'rgba(255, 152, 0, 0.5)';
+                            ctxOverview.setLineDash([3, 3]);
+                            ctxOverview.lineWidth = 1;
+                            ctxOverview.beginPath();
+                            ctxOverview.moveTo(xLead, padding.top);
+                            ctxOverview.lineTo(xLead, padding.top + graphHeight);
+                            ctxOverview.stroke();
+                            ctxOverview.setLineDash([]);
+                        }
+                    }
+                    
+                    if (step.isNaturalCooling) {
+                        // Natural cooling: hatched gray zone
+                        // Only cover the ramp portion, not the hold (if present)
+                        const rampX2 = timeToX(rampEndTime);
+                        const hatchWidth = rampX2 - x1;
+                        
+                        ctxOverview.fillStyle = 'rgba(158, 158, 158, 0.1)';
+                        ctxOverview.fillRect(x1, padding.top, hatchWidth, graphHeight);
+                        
+                        // Clip to zone boundaries before drawing hatching
+                        ctxOverview.save();
+                        ctxOverview.beginPath();
+                        ctxOverview.rect(x1, padding.top, hatchWidth, graphHeight);
+                        ctxOverview.clip();
+                        
+                        // Diagonal hatching pattern
+                        ctxOverview.strokeStyle = '#999';
+                        ctxOverview.lineWidth = 1;
+                        ctxOverview.setLineDash([5, 5]);
+                        const spacing = 15;
+                        for (let offset = -graphHeight; offset < hatchWidth + graphHeight; offset += spacing) {
+                            ctxOverview.beginPath();
+                            ctxOverview.moveTo(x1 + offset, height - padding.bottom);
+                            ctxOverview.lineTo(x1 + offset + graphHeight, padding.top);
+                            ctxOverview.stroke();
+                        }
+                        ctxOverview.setLineDash([]);
+                        ctxOverview.restore(); // Remove clipping
+                        
+                        // Store info for text rendering after all backgrounds
+                        if (!window.naturalCoolingTextInfo) window.naturalCoolingTextInfo = [];
+                        const durationH = Math.floor(step.rampDuration / 60);
+                        const durationM = Math.floor(step.rampDuration % 60);
+                        const durationStr = durationH > 0 
+                            ? `~${durationH}h${durationM.toString().padStart(2,'0')}` 
+                            : `~${durationM}min`;
+                        window.naturalCoolingTextInfo.push({
+                            centerX: (x1 + rampX2) / 2,
+                            centerY: (padding.top + height - padding.bottom) / 2,
+                            durationStr: durationStr
+                        });
+                    } else {
+                        // Controlled ramp: orange background
+                        ctxOverview.fillStyle = 'rgba(255, 152, 0, 0.08)';
+                        ctxOverview.fillRect(x1, padding.top, x2 - x1, graphHeight);
+                        
+                        // Draw ramp line (dashed gray)
+                        ctxOverview.strokeStyle = '#999';
+                        ctxOverview.setLineDash([4, 4]);
+                        ctxOverview.lineWidth = 2;
+                        ctxOverview.beginPath();
+                        ctxOverview.moveTo(x1, y1);
+                        ctxOverview.lineTo(x2, y2);
+                        ctxOverview.stroke();
+                        ctxOverview.setLineDash([]);
+                    }
+                }
+                
+                // Draw hold phase if present
+                if (step.holdTime > 0) {
+                    const x1 = timeToX(rampEndTime);
+                    const x2 = timeToX(holdEndTime);
+                    const y = tempToY(targetTemp);
+                    
+                    // Clear background first (to hide any hatching from cooling phase)
+                    ctxOverview.fillStyle = '#fafafa';
+                    ctxOverview.fillRect(x1, padding.top, x2 - x1, graphHeight);
+                    
+                    // Blue background for hold
+                    ctxOverview.fillStyle = 'rgba(33, 150, 243, 0.08)';
+                    ctxOverview.fillRect(x1, padding.top, x2 - x1, graphHeight);
+                    
+                    // Draw hold line (dashed gray horizontal)
+                    ctxOverview.strokeStyle = '#999';
+                    ctxOverview.setLineDash([4, 4]);
+                    ctxOverview.lineWidth = 2;
+                    ctxOverview.beginPath();
+                    ctxOverview.moveTo(x1, y);
+                    ctxOverview.lineTo(x2, y);
+                    ctxOverview.stroke();
+                    ctxOverview.setLineDash([]);
+                }
+                
+                currentTemp = targetTemp;
+            });
+
+            // Draw actual temperature curve (color-coded by phase: orange=RAMP, yellow=STABILIZING, blue=HOLD, green=default)
+            if (overviewHistory.length > 1) {
+                ctxOverview.lineWidth = 2;
+                
+                // Draw curve in segments with different colors per phase
+                for (let i = 0; i < overviewHistory.length - 1; i++) {
+                    const d1 = overviewHistory[i];
+                    const d2 = overviewHistory[i + 1];
+                    
+                    const x1 = timeToX(d1.time / 60);
+                    const y1 = tempToY(d1.temp);
+                    const x2 = timeToX(d2.time / 60);
+                    const y2 = tempToY(d2.temp);
+                    
+                    // Color based on phase
+                    switch(d1.phase) {
+                        case 'RAMP':
+                            ctxOverview.strokeStyle = '#FF9800'; // Orange
+                            break;
+                        case 'STABILIZING':
+                            ctxOverview.strokeStyle = '#FFC107'; // Amber/Yellow
+                            break;
+                        case 'HOLD':
+                            ctxOverview.strokeStyle = '#2196F3'; // Blue
+                            break;
+                        default:
+                            ctxOverview.strokeStyle = '#4CAF50'; // Green (default)
+                    }
+                    
+                    ctxOverview.beginPath();
+                    ctxOverview.moveTo(x1, y1);
+                    ctxOverview.lineTo(x2, y2);
+                    ctxOverview.stroke();
+                }
+            }
+
+            // Draw natural cooling text LAST (after all backgrounds)
+            if (window.naturalCoolingTextInfo && window.naturalCoolingTextInfo.length > 0) {
+                window.naturalCoolingTextInfo.forEach(info => {
+                    ctxOverview.save();
+                    ctxOverview.translate(info.centerX, info.centerY);
+                    ctxOverview.rotate(-Math.PI / 4); // -45 degrees
+                    
+                    ctxOverview.fillStyle = '#666';
+                    ctxOverview.font = 'italic 11px Arial';
+                    ctxOverview.textAlign = 'center';
+                    ctxOverview.textBaseline = 'middle';
+                    
+                    ctxOverview.fillText('Refroidissement', 0, -15);
+                    ctxOverview.fillText(`naturel (${info.durationStr})`, 0, -2);
+                    ctxOverview.font = 'bold italic 10px Arial';
+                    ctxOverview.fillStyle = '#E65100';
+                    ctxOverview.fillText('⚠ Échelle compressée', 0, 12);
+                    
+                    ctxOverview.restore();
+                });
+                window.naturalCoolingTextInfo = []; // Clear for next render
+            }
+
+            // Draw NOW cursor (red vertical line with triangle)
+            if (overviewHistory.length > 0) {
+                const lastData = overviewHistory[overviewHistory.length - 1];
+                const nowX = timeToX(lastData.time / 60);
+                
+                ctxOverview.strokeStyle = '#F44336';
+                ctxOverview.lineWidth = 3;
+                ctxOverview.beginPath();
+                ctxOverview.moveTo(nowX, padding.top);
+                ctxOverview.lineTo(nowX, height - padding.bottom);
+                ctxOverview.stroke();
+                
+                // Triangle marker at top
+                ctxOverview.fillStyle = '#F44336';
+                ctxOverview.beginPath();
+                ctxOverview.moveTo(nowX, padding.top - 10);
+                ctxOverview.lineTo(nowX - 5, padding.top);
+                ctxOverview.lineTo(nowX + 5, padding.top);
+                ctxOverview.fill();
+                
+                // "NOW" label
+                ctxOverview.fillStyle = '#F44336';
+                ctxOverview.font = 'bold 11px Arial';
+                ctxOverview.textAlign = 'center';
+                ctxOverview.fillText('NOW', nowX, padding.top - 13);
+            }
+        }
+
+        // ========== Vue Programme par Blocs v1.5.0 ==========
+        // Représentation visuelle avec blocs colorés au lieu de timeline
+        function drawBlockView() {
+            if (!ctxOverview) return;
+            
+            const width = canvasOverview.width;
+            const height = canvasOverview.height;
+            const padding = { top: 30, right: 20, bottom: 50, left: 60 };
+            const graphWidth = width - padding.left - padding.right;
+            const graphHeight = height - padding.top - padding.bottom;
+
+            // Debug scaling
+            console.log(`[SCALE] mode=${graphMode}, canvas=${width}px, graph=${graphWidth}px`);
+
+            // Clear canvas
+            ctxOverview.fillStyle = '#fafafa';
+            ctxOverview.fillRect(0, 0, width, height);
+
+            // Check if we have program data
+            if (!programSteps || programSteps.length === 0) {
+                ctxOverview.fillStyle = '#999';
+                ctxOverview.font = '14px Arial';
+                ctxOverview.textAlign = 'center';
+                ctxOverview.fillText('Sélectionnez un programme pour voir la vue par blocs', width/2, height/2);
+                return;
+            }
+
+            // Get current furnace temperature
+            let currentFurnaceTemp = 25;
+            if (overviewHistory.length > 0 && typeof overviewHistory[overviewHistory.length - 1].temp === 'number') {
+                currentFurnaceTemp = overviewHistory[overviewHistory.length - 1].temp;
+            } else if (tempHistory.length > 0 && typeof tempHistory[tempHistory.length - 1].temp === 'number') {
+                currentFurnaceTemp = tempHistory[tempHistory.length - 1].temp;
+            }
+
+            // Calculate temperature range for Y axis  
+            // Use programStartTemp (fixed at program start) instead of currentFurnaceTemp (dynamic)
+            // to prevent Y-axis from scrolling as temperature rises
+            // Try to restore from localStorage if page was reloaded during program
+            if (!window.programStartTemp && localStorage.getItem('programStartTemp')) {
+                window.programStartTemp = parseFloat(localStorage.getItem('programStartTemp'));
+                console.log('[GRAPH] Restored programStartTemp from localStorage: ' + window.programStartTemp.toFixed(1) + '°C');
+            }
+            const programStartTempForScale = window.programStartTemp || currentFurnaceTemp;
+            const programTemps = programSteps.map(s => s.targetTemp).filter(t => typeof t === 'number' && !isNaN(t));
+            const allTemps = programTemps.concat([programStartTempForScale]);
+            let minTemp = Math.min(...allTemps);
+            let maxTemp = Math.max(...allTemps);
+            const tempRange = maxTemp - minTemp;
+            const padding_temp = Math.max(tempRange * 0.1, 20);
+            minTemp -= padding_temp;
+            maxTemp += padding_temp;
+
+            // Helper: temperature to Y pixel
+            function tempToY(temp) {
+                const normalized = (temp - minTemp) / (maxTemp - minTemp);
+                return padding.top + graphHeight - (normalized * graphHeight);
+            }
+
+            // Draw Y axis
+            ctxOverview.strokeStyle = '#333';
+            ctxOverview.lineWidth = 2;
+            ctxOverview.beginPath();
+            ctxOverview.moveTo(padding.left, padding.top);
+            ctxOverview.lineTo(padding.left, padding.top + graphHeight);
+            ctxOverview.stroke();
+
+            // Draw temperature graduations
+            ctxOverview.fillStyle = '#666';
+            ctxOverview.font = '12px Arial';
+            ctxOverview.textAlign = 'right';
+            ctxOverview.strokeStyle = '#ddd';
+            ctxOverview.lineWidth = 1;
+            
+            const yTicks = 6;
+            for (let i = 0; i <= yTicks; i++) {
+                const temp = minTemp + (maxTemp - minTemp) * i / yTicks;
+                const y = tempToY(temp);
+                ctxOverview.fillText(temp.toFixed(0) + '°C', padding.left - 10, y + 4);
+                ctxOverview.beginPath();
+                ctxOverview.moveTo(padding.left, y);
+                ctxOverview.lineTo(width - padding.right, y);
+                ctxOverview.stroke();
+            }
+
+            // Calculate block widths with scaling factor
+            const BASE_RAMP_WIDTH_PX = 60;
+            const BASE_COOL_WIDTH_PX = 70;
+            const BASE_MIN_HOLD_WIDTH_PX = 40;
+            const BASE_MAX_HOLD_WIDTH_PX = 200;
+            const HOLD_COMPRESS_THRESHOLD = 30; // Au-delà de 30min, compression progressive
+            
+            // Helper function: calcul de largeur avec compression logarithmique douce
+            function calculateHoldWidth(holdMinutes, scaleFactor = 1.0) {
+                if (holdMinutes <= 0) return 0;
+                if (holdMinutes <= HOLD_COMPRESS_THRESHOLD) {
+                    // Linéaire pour HOLD courts (≤30min)
+                    return Math.max(BASE_MIN_HOLD_WIDTH_PX * scaleFactor, holdMinutes * 3.0 * scaleFactor);
+                } else {
+                    // Compression pour HOLD longs (>30min): racine carrée
+                    const baseWidth = HOLD_COMPRESS_THRESHOLD * 3.0;
+                    const extraMinutes = holdMinutes - HOLD_COMPRESS_THRESHOLD;
+                    const compressedExtra = Math.sqrt(extraMinutes) * 10;
+                    const totalWidth = (baseWidth + compressedExtra) * scaleFactor;
+                    return Math.min(BASE_MAX_HOLD_WIDTH_PX * scaleFactor, Math.max(BASE_MIN_HOLD_WIDTH_PX * scaleFactor, totalWidth));
+                }
+            }
+            
+            // Calculer largeur totale idéale (sans échelle)
+            let idealTotalWidth = 0;
+            programSteps.forEach(step => {
+                const prevIndex = programSteps.indexOf(step) - 1;
+                const prevTemp = prevIndex >= 0 ? programSteps[prevIndex].targetTemp : programStartTempForScale;
+                const deltaT = step.targetTemp - prevTemp;
+                
+                // RAMP or COOL block
+                if (Math.abs(deltaT) > 1) {
+                    idealTotalWidth += (deltaT < 0) ? BASE_COOL_WIDTH_PX : BASE_RAMP_WIDTH_PX;
+                    idealTotalWidth += 2; // Spacing
+                }
+                // HOLD block
+                if (step.holdTime > 0) {
+                    idealTotalWidth += calculateHoldWidth(step.holdTime, 1.0);
+                    idealTotalWidth += 2; // Spacing
+                }
+            });
+            
+            // Calculate scale factor: always scale to fill available width
+            // This ensures blocks resize between "dual" and "overview" modes
+            const scaleFactor = graphWidth / idealTotalWidth;
+            
+            // Apply scale to constants
+            const RAMP_WIDTH_PX = BASE_RAMP_WIDTH_PX * scaleFactor;
+            const COOL_WIDTH_PX = BASE_COOL_WIDTH_PX * scaleFactor;
+            const MIN_HOLD_WIDTH_PX = BASE_MIN_HOLD_WIDTH_PX * scaleFactor;
+            const MAX_HOLD_WIDTH_PX = BASE_MAX_HOLD_WIDTH_PX * scaleFactor;
+            
+            console.log(`[SCALE] ideal=${idealTotalWidth.toFixed(0)}px, factor=${scaleFactor.toFixed(3)}, rampW=${RAMP_WIDTH_PX.toFixed(0)}px`);
+            if (scaleFactor < 1.0) {
+                console.log(`[Block View] Scaling down by ${(scaleFactor * 100).toFixed(0)}% to fit canvas (${idealTotalWidth.toFixed(0)}px → ${graphWidth}px)`);
+            } else if (scaleFactor > 1.0) {
+                console.log(`[Block View] Scaling up by ${(scaleFactor * 100).toFixed(0)}% to fill canvas (${idealTotalWidth.toFixed(0)}px → ${graphWidth}px)`);
+            }
+
+            const numRamps = programSteps.length;
+            const numCools = programSteps.filter(s => {
+                const prevIndex = programSteps.indexOf(s) - 1;
+                const prevTemp = prevIndex >= 0 ? programSteps[prevIndex].targetTemp : currentFurnaceTemp;
+                return s.targetTemp < prevTemp;
+            }).length;
+
+            // Get current telemetry data (for real-time progression)
+            // CRITICAL: use ?? instead of || to handle stepIndex=0 correctly (0 is falsy!)
+            const currentStepIndex = (typeof window.currentProgramStepIndex !== 'undefined') ? window.currentProgramStepIndex : -1;
+            const currentPhase = window.currentPhase || 'IDLE';
+            const currentTemp = window.currentTemperature || currentFurnaceTemp;
+            const effectiveHoldMs = window.effectiveHoldMs || 0;
+            const isPreview = (currentStepIndex === -1); // Preview mode flag
+
+            console.log('[BLOCK VIEW] Render - stepIndex:', currentStepIndex, 'phase:', currentPhase, 'temp:', currentTemp.toFixed(1), 'holdMs:', effectiveHoldMs, 'isPreview:', isPreview);
+
+            // Draw blocks
+            let currentX = padding.left;
+            // Use program start temperature, NOT current temperature
+            // This ensures previousTemp tracks the PLANNED path, not actual temp
+            let previousTemp = window.programStartTemp || currentFurnaceTemp;
+
+            programSteps.forEach((step, stepIndex) => {
+                const startTemp = previousTemp;
+                const targetTemp = step.targetTemp;
+                const deltaT = targetTemp - startTemp;
+                const isHeating = deltaT > 0;
+                const isCooling = deltaT < 0;
+                const isFreeHeating = isHeating && (!step.withRamp || step.rampRate === 0);
+                const isActiveStep = (stepIndex === currentStepIndex);
+
+                // Calculate progress (0 to 1) - CRITICAL: must be stable for past/future steps
+                let progressRamp = 0;
+                let progressHold = 0;
+                
+                if (stepIndex < currentStepIndex) {
+                    // Past steps: always 100% complete (checked FIRST)
+                    progressRamp = 1.0;
+                    progressHold = 1.0;
+                } else if (stepIndex > currentStepIndex) {
+                    // Future steps: always 0% (explicitly set)
+                    progressRamp = 0;
+                    progressHold = 0;
+                } else if (isActiveStep) {
+                    // Active step: calculate based on phase
+                    if (currentPhase === 'RAMP' || currentPhase === 'STABILIZING') {
+                        // Ramp progress: based on temperature
+                        if (Math.abs(deltaT) > 0.1) {
+                            progressRamp = Math.abs(currentTemp - startTemp) / Math.abs(deltaT);
+                            progressRamp = Math.max(0, Math.min(1, progressRamp));
+                        } else {
+                            progressRamp = 1.0;
+                        }
+                    } else if (currentPhase === 'HOLD') {
+                        // Hold progress: based on time
+                        progressRamp = 1.0; // Ramp complete
+                        if (step.holdTime > 0) {
+                            const holdTimeMs = step.holdTime * 60 * 1000;
+                            progressHold = Math.min(1.0, effectiveHoldMs / holdTimeMs);
+                        }
+                    }
+                }
+
+                // Dynamic color based on temperature error (for active step)
+                const tempError = isActiveStep ? Math.abs(currentTemp - targetTemp) : 0;
+                const TOLERANCE = 10;
+
+                // BLOCK 1: RAMP/HEATING/COOLING
+                if (Math.abs(deltaT) > 1) {
+                    const blockWidth = isCooling ? COOL_WIDTH_PX : RAMP_WIDTH_PX;
+                    const blockHeight = graphHeight * Math.abs(deltaT) / (maxTemp - minTemp);
+                    const blockY = isHeating ? tempToY(targetTemp) : tempToY(startTemp);
+
+                    // Blinking border for active step
+                    const blinkPhase = Math.floor(Date.now() / 500) % 2;
+                    if (isActiveStep && currentPhase !== 'HOLD' && blinkPhase === 1) {
+                        ctxOverview.strokeStyle = '#FFC107'; // Yellow
+                        ctxOverview.lineWidth = 3;
+                        ctxOverview.strokeRect(currentX - 1, blockY - 1, blockWidth + 2, blockHeight + 2);
+                    }
+
+                    // Draw block outline
+                    ctxOverview.strokeStyle = '#333';
+                    ctxOverview.lineWidth = 1;
+                    ctxOverview.strokeRect(currentX, blockY, blockWidth, blockHeight);
+
+                    // Fill colors: pastel for preview, vivid for active run
+                    let fillColor, fillColorPastel;
+                    
+                    if (isActiveStep && progressRamp > 0 && progressRamp < 1) {
+                        // Active ramp: color based on tolerance
+                        if (tempError > TOLERANCE) {
+                            fillColor = isFreeHeating ? '#9C27B0' : '#FF9800'; // Violet or Orange
+                        } else if (tempError <= TOLERANCE && tempError > 2) {
+                            fillColor = '#4CAF50'; // Green (within tolerance)
+                        } else {
+                            fillColor = currentTemp > targetTemp + 2 ? '#FF5722' : '#4CAF50'; // Red overshoot
+                        }
+                    } else {
+                        // Default vivid colors for run mode
+                        if (isFreeHeating) {
+                            fillColor = '#9C27B0'; // Violet
+                        } else if (isHeating) {
+                            fillColor = '#FF9800'; // Orange (controlled heating ramp)
+                        } else {
+                            // Cooling gradient
+                            const gradient = ctxOverview.createLinearGradient(currentX, blockY, currentX, blockY + blockHeight);
+                            gradient.addColorStop(0, '#F44336');
+                            gradient.addColorStop(0.5, '#FF9800');
+                            gradient.addColorStop(1, '#4CAF50');
+                            fillColor = gradient;
+                        }
+                    }
+                    
+                    // Pastel colors for preview background
+                    if (isFreeHeating) {
+                        fillColorPastel = '#E1BEE7'; // Violet pastel
+                    } else if (isHeating) {
+                        fillColorPastel = '#FFE0B2'; // Orange pastel (au lieu de bleu)
+                    } else {
+                        // Cooling gradient pastel
+                        const gradientPastel = ctxOverview.createLinearGradient(currentX, blockY, currentX, blockY + blockHeight);
+                        gradientPastel.addColorStop(0, '#FFCDD2'); // Red pastel
+                        gradientPastel.addColorStop(0.5, '#FFE0B2'); // Orange pastel
+                        gradientPastel.addColorStop(1, '#C8E6C9'); // Green pastel
+                        fillColorPastel = gradientPastel;
+                    }
+
+                    // Fill logic: pastel full background + vivid progressive overlay
+                    if (isPreview) {
+                        // Preview: full pastel background
+                        ctxOverview.fillStyle = fillColorPastel;
+                        ctxOverview.fillRect(currentX + 1, blockY + 1, blockWidth - 2, blockHeight - 2);
+                    } else {
+                        // Run mode: pastel background for incomplete steps
+                        if (stepIndex > currentStepIndex || progressRamp === 0) {
+                            // Future steps or not started: pastel
+                            ctxOverview.fillStyle = fillColorPastel;
+                            ctxOverview.fillRect(currentX + 1, blockY + 1, blockWidth - 2, blockHeight - 2);
+                        }
+                        
+                        // Active/past steps: vivid progressive fill
+                        if (progressRamp > 0 || stepIndex < currentStepIndex) {
+                            const actualProgress = stepIndex < currentStepIndex ? 1.0 : progressRamp;
+                            const fillHeight = blockHeight * actualProgress;
+                            ctxOverview.fillStyle = fillColor;
+                            if (isHeating) {
+                                // Fill from bottom
+                                ctxOverview.fillRect(currentX + 1, blockY + blockHeight - fillHeight, blockWidth - 2, fillHeight - 1);
+                            } else {
+                                // Fill from top (cooling)
+                                ctxOverview.fillRect(currentX + 1, blockY + 1, blockWidth - 2, fillHeight - 1);
+                            }
+                        }
+                    }
+
+                    // Step label
+                    ctxOverview.fillStyle = '#333';
+                    ctxOverview.font = 'bold 11px Arial';
+                    ctxOverview.textAlign = 'center';
+                    ctxOverview.fillText('E' + (stepIndex + 1), currentX + blockWidth/2, padding.top + graphHeight + 15);
+
+                    // Target temperature
+                    ctxOverview.font = '10px Arial';
+                    ctxOverview.fillText(targetTemp.toFixed(0) + '°', currentX + blockWidth/2, blockY - 3);
+
+                    currentX += blockWidth + 2;
+                }
+
+                // BLOCK 2: HOLD
+                if (step.holdTime > 0) {
+                    const blockWidth = calculateHoldWidth(step.holdTime, scaleFactor); // Avec mise à l'échelle
+                    const blockHeight = 20;
+                    const blockY = tempToY(targetTemp) - blockHeight/2;
+
+                    // Blinking border for active HOLD
+                    const blinkPhase = Math.floor(Date.now() / 500) % 2;
+                    if (isActiveStep && currentPhase === 'HOLD' && blinkPhase === 1) {
+                        ctxOverview.strokeStyle = '#FFC107'; // Yellow
+                        ctxOverview.lineWidth = 3;
+                        ctxOverview.strokeRect(currentX - 1, blockY - 1, blockWidth + 2, blockHeight + 2);
+                    }
+
+                    ctxOverview.strokeStyle = '#333';
+                    ctxOverview.lineWidth = 1;
+                    ctxOverview.strokeRect(currentX, blockY, blockWidth, blockHeight);
+
+                    // Fill colors: HOLD blocks are ALWAYS blue (no dynamic color)
+                    let holdFillColor = '#2196F3'; // Blue vivid (constant)
+                    let holdFillColorPastel = '#BBDEFB'; // Blue pastel (constant)
+
+                    // Fill logic: pastel background + vivid progressive overlay
+                    if (isPreview) {
+                        // Preview: full pastel background
+                        ctxOverview.fillStyle = holdFillColorPastel;
+                        ctxOverview.fillRect(currentX + 1, blockY + 1, blockWidth - 2, blockHeight - 2);
+                    } else {
+                        // Run mode: pastel background for incomplete/future steps
+                        if (stepIndex > currentStepIndex || progressHold === 0) {
+                            ctxOverview.fillStyle = holdFillColorPastel;
+                            ctxOverview.fillRect(currentX + 1, blockY + 1, blockWidth - 2, blockHeight - 2);
+                        }
+                        
+                        // Active/past steps: vivid progressive fill
+                        if (progressHold > 0 || stepIndex < currentStepIndex) {
+                            const actualProgressHold = stepIndex < currentStepIndex ? 1.0 : progressHold;
+                            const fillWidth = (blockWidth - 2) * actualProgressHold;
+                            ctxOverview.fillStyle = holdFillColor;
+                            ctxOverview.fillRect(currentX + 1, blockY + 1, fillWidth, blockHeight - 2);
+                        }
+                    }
+
+                    // Hold time label (with visual indicator for compressed blocks)
+                    ctxOverview.fillStyle = '#333';
+                    ctxOverview.font = '10px Arial';
+                    ctxOverview.textAlign = 'center';
+                    const timeLabel = step.holdTime >= HOLD_COMPRESS_THRESHOLD 
+                        ? step.holdTime + 'min*'  // Asterisk pour HOLD compressés
+                        : step.holdTime + 'min';
+                    ctxOverview.fillText(timeLabel, currentX + blockWidth/2, blockY + blockHeight/2 + 3);
+
+                    currentX += blockWidth + 2;
+                }
+
+                // Update previousTemp with TARGET temperature for next step calculation
+                previousTemp = targetTemp;
+            });
+
+            // Recursive redraw every 500ms for animation (with proper cleanup)
+            if (blockViewTimer) clearTimeout(blockViewTimer);
+            if (graphMode !== 'realtime') {
+                blockViewTimer = setTimeout(() => { drawBlockView(); }, 500);
             }
         }
 
@@ -539,27 +1753,177 @@
                 try {
                     const data = JSON.parse(event.data);
                     
+                    // Debug ALL messages in console (diagnostic)
+                    console.log('[WS]', data);
+                    
+                    // Debug PID diagnostics when program running
+                    if (data.program && typeof data.pidError !== 'undefined') {
+                        console.log(`[PID] Error: ${data.pidError.toFixed(2)}°C, Output: ${data.pidOutput.toFixed(1)} PWM`);
+                    }
+                    
+                    // Debug graph mode in console
+                    if (data.graphMode) {
+                        console.log(`[GRAPH] Mode: ${data.graphMode}, Progress: ${data.progressPct || 0}%, Est. Duration: ${data.estimatedDurationMin || 0} min, tempHistory: ${tempHistory.length}, targetHistory: ${targetHistory.length}`);
+                    }
+                    
+                    // Check for emergency shutdown
+                    const emergencyBanner = document.getElementById('emergencyBanner');
+                    const emergencyMsg = document.getElementById('emergencyMessage');
+                    if (data.emergency) {
+                        emergencyBanner.classList.add('active');
+                        if (data.emergencyMessage) {
+                            emergencyMsg.textContent = data.emergencyMessage;
+                        }
+                        // Disable start button during emergency
+                        document.getElementById('startBtn').disabled = true;
+                    } else {
+                        emergencyBanner.classList.remove('active');
+                    }
+                    
                     // Update temperature displays
                     if (typeof data.temp === 'number') {
                         document.getElementById('currentTemp').textContent = data.temp.toFixed(1) + '°C';
                         
-                        // Add to history with timestamp
-                        tempHistory.push({time: data.elapsedSeconds || 0, temp: data.temp});
-                        if (tempHistory.length > MAX_HISTORY) {
-                            tempHistory.shift();
-                            targetHistory.shift();
+                        // Store for block view (v1.5.0)
+                        window.currentTemperature = data.temp;
+                        
+                        // Initialize client start time on first data point
+                        if (clientStartTime === null) {
+                            clientStartTime = Date.now();
+                            lastDataAddTime = 0; // Force first point to be added (timeSinceLastAdd will be huge)
+                            // Clear history arrays to avoid timestamp conflicts after page reload
+                            tempHistory = [];
+                            targetHistory = [];
+                            console.log('[INIT] clientStartTime reset, cleared tempHistory/targetHistory');
+                        }
+                        
+                        // Throttle data addition based on updateInterval (from slider)
+                        const currentInterval = parseInt(document.getElementById('updateIntervalInput').value) || 1000;
+                        const now = Date.now();
+                        const timeSinceLastAdd = now - lastDataAddTime;
+                        
+                        // Only add data point if enough time has elapsed
+                        if (timeSinceLastAdd >= currentInterval) {
+                            // Calculate client-side elapsed time in seconds
+                            const clientElapsedSeconds = (now - clientStartTime) / 1000;
+                            
+                            // Add to history with client timestamp (accurate to browser refresh rate)
+                            tempHistory.push({time: clientElapsedSeconds, temp: data.temp});
+                            if (tempHistory.length > MAX_HISTORY) {
+                                tempHistory.shift();
+                                targetHistory.shift();
+                            }
+                            
+                            console.log('[DATA] Added temp point:', clientElapsedSeconds.toFixed(1) + 's', data.temp.toFixed(1) + '°C', 'total:', tempHistory.length);
+                            
+                            lastDataAddTime = now; // Update timestamp for next throttle check
                         }
                     }
                     
                     if (typeof data.target === 'number') {
                         document.getElementById('targetTemp').textContent = data.target.toFixed(1) + '°C';
-                        targetHistory.push({time: data.elapsedSeconds || 0, target: data.target});
+                        
+                        // Only add target data when temp data is added (synchronized)
+                        const now = Date.now();
+                        const timeSinceLastAdd = now - lastDataAddTime;
+                        
+                        // Add target point if we just added a temp point (within 200ms tolerance)
+                        // Increased tolerance from 100ms to 200ms to handle initialization edge case
+                        if (timeSinceLastAdd < 200 && clientStartTime) {
+                            const clientElapsedSeconds = (now - clientStartTime) / 1000;
+                            // WORKAROUND: In IDLE mode, firmware sends target=0°C (no program running)
+                            // This compresses Y-axis scale and makes curves invisible
+                            // Fix: Display currentTemp as target when target=0 (IDLE mode)
+                            const displayTarget = (data.target === 0) ? data.temp : data.target;
+                            targetHistory.push({time: clientElapsedSeconds, target: displayTarget});
+                            console.log('[DATA] Added target point:', clientElapsedSeconds.toFixed(1) + 's', displayTarget.toFixed(1) + '°C', (data.target === 0 ? '(IDLE, using temp)' : ''), 'total:', targetHistory.length);
+                        }
+                    }
+                    
+                    // Update block view telemetry (v1.5.0) - MUST happen BEFORE drawGraphs()
+                    if (typeof data.programStep !== 'undefined') {
+                        window.currentProgramStepIndex = data.programStep - 1; // 0-based index
+                        console.log('[BLOCK VIEW] Updated currentProgramStepIndex:', window.currentProgramStepIndex, 'phase:', data.phase);
+                    }
+                    if (data.phase) {
+                        window.currentPhase = data.phase;
+                    }
+                    if (typeof data.effectiveHoldMs !== 'undefined') {
+                        window.effectiveHoldMs = data.effectiveHoldMs;
+                        console.log('[BLOCK VIEW] Updated effectiveHoldMs:', window.effectiveHoldMs, 'ms');
+                    }
+                    // Also update window.currentTemperature for block view calculations
+                    if (typeof data.temp === 'number') {
+                        window.currentTemperature = data.temp;
                     }
                     
                     // Update program status and button states
                     const isRunning = data.program ? true : false;
                     const startBtn = document.getElementById('startBtn');
                     const stopBtn = document.getElementById('stopBtn');
+                    
+                    // Detect program start transition (0 → 1) and clear history
+                    if (isRunning && !lastProgramState) {
+                        tempHistory = [];
+                        targetHistory = [];
+                        overviewHistory = [];
+                        lastOverviewSample = 0;
+                        clientStartTime = Date.now(); // Reset client timer on program start
+                        
+                        // Capture starting temperature for block view calculations
+                        window.programStartTemp = data.temp || currentFurnaceTemp;
+                        // Persist in localStorage to survive page reloads
+                        localStorage.setItem('programStartTemp', window.programStartTemp);
+                        console.log('[GRAPH] History cleared - new program started, startTemp=' + window.programStartTemp.toFixed(1) + '°C');
+                    }
+                    
+                    // Restore program context after page reload (v1.5.12)
+                    if (isRunning && !window.programStartTemp && data.programStartTemp) {
+                        window.programStartTemp = data.programStartTemp;
+                        localStorage.setItem('programStartTemp', window.programStartTemp);
+                        console.log('[GRAPH] Restored programStartTemp from firmware: ' + window.programStartTemp.toFixed(1) + '°C');
+                    }
+                    if (isRunning && !clientStartTime && data.programStartTime && data.totalElapsedSeconds) {
+                        // Reconstruct clientStartTime from firmware data
+                        clientStartTime = Date.now() - (data.totalElapsedSeconds * 1000);
+                        console.log('[GRAPH] Restored clientStartTime from firmware: ' + new Date(clientStartTime).toISOString());
+                    }
+                    // Detect program stop transition (1 → 0) and clear persisted data
+                    if (!isRunning && lastProgramState) {
+                        localStorage.removeItem('programStartTemp');
+                        window.programStartTemp = null;
+                        console.log('[GRAPH] Program stopped - cleared programStartTemp');
+                    }
+                    lastProgramState = isRunning ? 1 : 0;
+                    
+                    // Update program steps data for overview graph
+                    // Only update if we don't have enriched data already (from preview)
+                    // WebSocket data lacks rampDuration/isNaturalCooling fields needed for rendering
+                    if (data.programSteps && data.programSteps.length > 0) {
+                        const hasEnrichedData = programSteps.length > 0 && programSteps[0].hasOwnProperty('rampDuration');
+                        if (!hasEnrichedData) {
+                            // No enriched data yet, accept WebSocket data (will be enriched in drawOverviewGraph)
+                            programSteps = data.programSteps;
+                        }
+                        // Else: keep existing enriched programSteps from preview
+                    }
+                    
+                    // Add to overview history (reduced sampling: 1 point / 20s)
+                    if (isRunning && data.totalElapsedSeconds && 
+                        (data.totalElapsedSeconds - lastOverviewSample >= 20 || lastOverviewSample === 0)) {
+                        overviewHistory.push({
+                            time: data.totalElapsedSeconds,
+                            temp: data.temp,
+                            target: data.target,
+                            phase: data.phase || 'IDLE'
+                        });
+                        lastOverviewSample = data.totalElapsedSeconds;
+                        
+                        // Limit to ~500 points max (2h45 at 20s/pt)
+                        if (overviewHistory.length > 500) {
+                            overviewHistory.shift();
+                        }
+                    }
                     
                     if (isRunning) {
                         let statusText = data.programName || 'En cours';
@@ -575,12 +1939,18 @@
                             document.getElementById('stepStatus').textContent = '-';
                         }
                         
+                        // Update time displays
+                        document.getElementById('elapsedTotal').textContent = formatTime(data.totalElapsedSeconds || 0);
+                        document.getElementById('elapsedStep').textContent = formatTime(data.stepElapsedSeconds || 0);
+                        
                         // Enable stop button, disable start button
                         startBtn.disabled = true;
                         stopBtn.disabled = false;
                     } else {
                         document.getElementById('programStatus').textContent = 'Arrêté';
                         document.getElementById('stepStatus').textContent = '-';
+                        document.getElementById('elapsedTotal').textContent = '0:00';
+                        document.getElementById('elapsedStep').textContent = '0:00';
                         
                         // Enable start button, disable stop button
                         startBtn.disabled = false;
@@ -611,15 +1981,14 @@
                         if (typeof data.pidKd === 'number') {
                             document.getElementById('pidKdInput').value = data.pidKd;
                         }
-                        if (typeof data.tempOffset === 'number') {
-                            document.getElementById('tempOffsetInput').value = data.tempOffset;
-                        }
                     }
                     
                     // Redraw graph (throttled to once per second)
+                    // CRITICAL: drawGraphs() MUST be called AFTER all telemetry updates above
+                    // to ensure window.currentProgramStepIndex/currentPhase/effectiveHoldMs are set
                     const now = Date.now();
                     if (now - lastGraphUpdate > 1000) {
-                        drawGraph();
+                        drawGraphs();
                         lastGraphUpdate = now;
                     }
                     
@@ -651,6 +2020,8 @@
                     if (slider && display) {
                         slider.value = s.updateInterval;
                         display.textContent = s.updateInterval;
+                        // Update graph title with actual value from firmware
+                        updateRealtimeGraphTitle(s.updateInterval);
                     }
                 }
                 // Initialize PID inputs from status
@@ -686,6 +2057,133 @@
                 });
         }
 
+        // Setup program preview handler
+        function setupProgramPreview() {
+            document.getElementById('programSelect').onchange = function() {
+                const program = this.value;
+                if (!program) {
+                    programSteps = [];
+                    overviewHistory = [];
+                    drawGraphs();
+                    return;
+                }
+                
+                // Fetch program JSON to preview
+                fetch(`/download?path=/programs/${program}`)
+                    .then(response => {
+                        console.log('[PREVIEW] Response status:', response.status);
+                        return response.text();
+                    })
+                    .then(text => {
+                        console.log('[PREVIEW] Raw response:', text.substring(0, 200));
+                        if (!text || text.trim() === '') {
+                            throw new Error('Empty response from server');
+                        }
+                        return JSON.parse(text);
+                    })
+                    .then(progData => {
+                        console.log('[PREVIEW] Parsed program:', progData);
+                        if (!progData.steps || progData.steps.length === 0) return;
+                        
+                    // Calculate estimated endTimes (client-side, v1.4.9)
+                    let cumulativeTime = 0;
+                    // Start from actual furnace temperature if available (v1.4.9 fix)
+                    let previousTemp = 25; // Default ambient
+                    if (overviewHistory.length > 0 && typeof overviewHistory[overviewHistory.length - 1].temp === 'number') {
+                        previousTemp = overviewHistory[overviewHistory.length - 1].temp;
+                    } else if (tempHistory.length > 0 && typeof tempHistory[tempHistory.length - 1].temp === 'number') {
+                        previousTemp = tempHistory[tempHistory.length - 1].temp;
+                    }
+                    
+                    programSteps = progData.steps.map((step, index) => {
+                        const startTime = cumulativeTime;
+                        const deltaT = step.targetTemp - previousTemp;
+                        let rampDuration = 0;
+                        let isNaturalCooling = false;
+                        
+                        // Calculate ramp duration using configurable parameters (v1.4.9)
+                        if (step.withRamp && step.rampRate > 0) {
+                            // Active ramp with specified rate
+                            rampDuration = Math.abs(deltaT) / step.rampRate; // minutes
+                        } else if (!step.withRamp && deltaT > 0) {
+                            // Free heating (uncontrolled rise)
+                            rampDuration = Math.abs(deltaT) / estimatedHeatingRate;
+                        } else if (!step.withRamp && deltaT < 0) {
+                            // Natural cooling (uncontrolled descent)
+                            rampDuration = Math.abs(deltaT) / estimatedCoolingRate;
+                            isNaturalCooling = true;
+                        }
+                        
+                        // Add estimated stabilization time (v1.4.9)
+                        if (rampDuration > 0) {
+                            rampDuration += estimatedStabilizationTime;
+                        }
+                        
+                        const holdTime = step.holdTime || 0; // Already in minutes in JSON
+                        const totalStepDuration = rampDuration + holdTime;
+                        
+                        cumulativeTime += totalStepDuration;
+                        const endTime = cumulativeTime;
+                        previousTemp = step.targetTemp;
+                        
+                        return {
+                            targetTemp: step.targetTemp,
+                            startTime: startTime,
+                            rampDuration: rampDuration,
+                            holdTime: holdTime,
+                            endTime: endTime,
+                            withRamp: step.withRamp,
+                            isNaturalCooling: isNaturalCooling
+                        };
+                    });                        // Clear actual data, show only predicted curve
+                        overviewHistory = [];
+                        
+                        console.log('[PREVIEW] programSteps calculated:', programSteps);
+                        
+                        // Update PID parameters if program defines them
+                        console.log('[PREVIEW] PID params from program:', {
+                            Kp: progData.pidKp, 
+                            Ki: progData.pidKi, 
+                            Kd: progData.pidKd
+                        });
+                        
+                        let pidUpdated = false;
+                        if (progData.pidKp !== undefined) {
+                            document.getElementById('pidKpInput').value = progData.pidKp;
+                            console.log('[PREVIEW] Updated Kp input to:', progData.pidKp);
+                            pidUpdated = true;
+                        }
+                        if (progData.pidKi !== undefined) {
+                            document.getElementById('pidKiInput').value = progData.pidKi;
+                            console.log('[PREVIEW] Updated Ki input to:', progData.pidKi);
+                            pidUpdated = true;
+                        }
+                        if (progData.pidKd !== undefined) {
+                            document.getElementById('pidKdInput').value = progData.pidKd;
+                            console.log('[PREVIEW] Updated Kd input to:', progData.pidKd);
+                            pidUpdated = true;
+                        }
+                        
+                        // Prevent WebSocket from overwriting program PID values
+                        if (pidUpdated) {
+                            userEditingInterval = true;
+                            console.log('[PREVIEW] Protected PID inputs from WebSocket override');
+                        }
+                        
+                        // Switch to overview mode to show preview
+                        if (graphMode === 'realtime') {
+                            graphMode = 'overview';
+                            document.getElementById('graphToggle').innerHTML = 'Mode: Vue programme ▼';
+                            updateGraphLayout();
+                        }
+                        
+                        console.log('[PREVIEW] Calling drawGraphs(), graphMode:', graphMode);
+                        drawGraphs();
+                    })
+                    .catch(err => console.error('[PREVIEW] Erreur chargement programme:', err));
+            };
+        }
+
         // Button handlers
         document.getElementById('startBtn').onclick = () => {
             const program = document.getElementById('programSelect').value;
@@ -706,5 +2204,6 @@
             }
         };
     </script>
+    <div class="build-footer">Build: v1.6.1 - 2025-12-17 14:30</div>
 </body>
 </html>

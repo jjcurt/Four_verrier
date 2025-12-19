@@ -10,7 +10,11 @@
     .header h2{margin:0}
     .back-link{text-decoration:none;color:#2196F3;font-size:0.9em}
     .section{background:white;padding:20px;border-radius:8px;margin-bottom:20px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
-    .section h3{color:#333;border-bottom:2px solid #2196F3;padding-bottom:8px;margin-top:0}
+    .section h3{color:#333;border-bottom:2px solid #2196F3;padding-bottom:8px;margin-top:0;cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center}
+    .section h3:hover{background:#f5f5f5}
+    .section h3 .toggle{font-size:0.8em;color:#666}
+    .section-content{overflow:hidden;transition:max-height 0.3s ease-out}
+    .section-content.collapsed{max-height:0!important}
     table{width:100%;border-collapse:collapse}
     td,th{padding:6px;border:1px solid #ddd}
     button{padding:8px 12px;margin:2px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;font-size:0.9em}
@@ -28,6 +32,7 @@
     .status-box.info{background:#E3F2FD;border-color:#2196F3;color:#0D47A1}
     .status-box.warning{background:#FFF3E0;border-color:#FF9800;color:#E65100}
     .status-box.success{background:#E8F5E9;border-color:#4CAF50;color:#1B5E20}
+    .build-footer{position:fixed;bottom:0;right:0;padding:4px 12px;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;font-family:monospace;border-top-left-radius:6px;z-index:9999;pointer-events:none}
   </style>
 </head>
 <body>
@@ -36,29 +41,28 @@
     <a href="/" class="back-link">← Retour à l'accueil</a>
   </div>
   
-  <div class="section">
-    <h3>📄 Fichiers HTML (Interface Web)</h3>
-    <div id="htmlFiles" class="empty">Chargement...</div>
-    <form id="uploadHtmlForm" style="margin-top:15px">
-      <input type="file" id="htmlFileInput" name="file" accept=".html,.htm" required>
-      <button type="submit">📤 Téléverser HTML</button>
-      <div class="upload-hint">Téléverse vers /www/ pour mettre à jour l'interface web</div>
-    </form>
-  </div>
-
-  <div class="section">
-    <h3>📋 Programmes de cuisson</h3>
-    <div id="programs" class="empty">Chargement...</div>
-    <form id="uploadForm" style="margin-top:15px">
-      <input type="file" id="fileInput" name="file" accept=".json" required>
-      <button type="submit">📤 Téléverser Programme</button>
-      <div class="upload-hint">Fichiers JSON définissant les profils de température</div>
-    </form>
+  <div class="status-box info" style="margin-bottom:15px">
+    ℹ️ <strong>Astuce:</strong> Les programmes se gèrent depuis la <a href="/programs.html" style="color:#0D47A1;text-decoration:underline">page dédiée</a>. 
+    Cette page permet de gérer les logs CSV et les fichiers système.
   </div>
   
   <div class="section">
-    <h3>📊 Logs</h3>
-    <div id="logs" class="empty">Chargement...</div>
+    <h3 onclick="toggleSection('logs')">📊 Logs CSV <span class="toggle" id="logs-toggle">▶</span></h3>
+    <div id="logs-content" class="section-content collapsed">
+      <div id="logs" class="empty">Chargement...</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3 onclick="toggleSection('html')">📄 Fichiers HTML (Interface Web) <span class="toggle" id="html-toggle">▶</span></h3>
+    <div id="html-content" class="section-content collapsed">
+      <div id="htmlFiles" class="empty">Chargement...</div>
+      <form id="uploadHtmlForm" style="margin-top:15px">
+        <input type="file" id="htmlFileInput" name="file" accept=".html,.htm" required>
+        <button type="submit">📤 Téléverser HTML</button>
+        <div class="upload-hint">Téléverse vers /www/ pour mettre à jour l'interface web</div>
+      </form>
+    </div>
   </div>
 
   <div class="section">
@@ -70,13 +74,13 @@
     <form id="uploadFirmwareForm" style="margin-bottom:15px">
       <input type="file" id="firmwareFileInput" name="file" accept=".bin" required>
       <button type="submit">📤 Téléverser Firmware (.bin)</button>
-      <div class="upload-hint">Téléverse le fichier .bin vers /updates/ (crée automatiquement le marqueur .pending)</div>
+      <div class="upload-hint">⚠️ Le fichier sera automatiquement renommé en <strong>firmware.bin</strong> dans /updates/</div>
     </form>
     
     <hr style="margin:20px 0;border:none;border-top:1px solid #ddd">
     
-    <p style="margin-bottom:10px"><strong>Fichiers firmware disponibles sur carte SD:</strong></p>
-    <select id="otaFiles" style="padding:8px;margin-right:10px;border-radius:4px;border:1px solid #ddd"></select>
+    <div id="firmwareStatus" style="margin-bottom:15px"></div>
+    
     <div style="margin-top:10px">
       <button id="applyOta" style="background:#FF9800">⚡ Appliquer OTA Immédiat</button>
       <button id="applySdUpdate" style="background:#4CAF50">💾 Appliquer au Redémarrage (SD)</button>
@@ -113,29 +117,6 @@
       })
     }
 
-    async function listPrograms(){
-      const res=await fetch('/api/programs');
-      const data=await res.json();
-      const container=document.getElementById('programs');
-      container.innerHTML='';
-      if(data.length===0){
-        container.innerHTML='<div class="empty">(aucun programme)</div>';
-        return;
-      }
-      data.forEach(name=>{
-        const item=document.createElement('div');
-        item.className='file-item';
-        item.innerHTML=`
-          <span class="file-name">${escapeHtml(name)}</span>
-          <div>
-            <button onclick="download('/download?path=/programs/${encodeURIComponent(name)}')">⬇️ Télécharger</button>
-            <button class="danger" onclick="del('/programs/${encodeURIComponent(name)}')">🗑️ Supprimer</button>
-          </div>
-        `;
-        container.appendChild(item);
-      })
-    }
-
     async function listLogs(){
       const res=await fetch('/api/logs');
       const data=await res.json();
@@ -162,8 +143,6 @@
     async function listOtaCandidates(){
       const res=await fetch('/api/list?dir=/updates');
       const data=await res.json();
-      const sel=document.getElementById('otaFiles');
-      sel.innerHTML='';
       
       // Check for .pending marker
       const hasPending = data.includes('.pending');
@@ -175,24 +154,19 @@
         statusBox.innerHTML = '<div class="status-box info">ℹ️ Aucune mise à jour SD en attente. Vous pouvez téléverser un nouveau firmware.</div>';
       }
       
-      if(data.length===0){
-        sel.innerHTML='<option value="">Aucun fichier disponible</option>';
-        return;
-      }
-      // Filter out .pending marker from file list (not a firmware)
-      const firmwareFiles = data.filter(n => !n.startsWith('.'));
+      // Check if firmware.bin exists
+      const hasFirmware = data.includes('firmware.bin');
+      const firmwareStatusDiv = document.getElementById('firmwareStatus');
       
-      if(firmwareFiles.length === 0) {
-        sel.innerHTML='<option value="">Aucun firmware disponible</option>';
-        return;
+      if(!hasFirmware){
+        firmwareStatusDiv.innerHTML='<div class="status-box warning">⚠️ Aucun firmware prêt. Téléversez un fichier .bin ci-dessus.</div>';
+        document.getElementById('applyOta').disabled = true;
+        document.getElementById('applySdUpdate').disabled = true;
+      } else {
+        firmwareStatusDiv.innerHTML='<div class="status-box success">✅ Firmware prêt: <strong>firmware.bin</strong></div>';
+        document.getElementById('applyOta').disabled = false;
+        document.getElementById('applySdUpdate').disabled = false;
       }
-      
-      firmwareFiles.forEach(n=>{
-        const opt=document.createElement('option');
-        opt.value=n;
-        opt.textContent=n;
-        sel.appendChild(opt)
-      });
     }
 
     async function download(url){ window.location=url; }
@@ -214,6 +188,22 @@
       return div.innerHTML;
     }
 
+    // Toggle section visibility
+    function toggleSection(section) {
+      const content = document.getElementById(section + '-content');
+      const toggle = document.getElementById(section + '-toggle');
+      
+      if (content.classList.contains('collapsed')) {
+        content.classList.remove('collapsed');
+        content.style.maxHeight = content.scrollHeight + 'px';
+        toggle.textContent = '▼';
+      } else {
+        content.classList.add('collapsed');
+        content.style.maxHeight = '0';
+        toggle.textContent = '▶';
+      }
+    }
+
     // Upload HTML file to /www/
     document.getElementById('uploadHtmlForm').onsubmit=async (e)=>{
       e.preventDefault();
@@ -231,24 +221,7 @@
       }
     };
 
-    // Upload program to /programs/
-    document.getElementById('uploadForm').onsubmit=async (e)=>{
-      e.preventDefault();
-      const f=document.getElementById('fileInput').files[0];
-      if(!f) return alert('Sélectionnez un fichier de programme');
-      const fd=new FormData();
-      fd.append('file', f, f.name);
-      const res=await fetch('/upload', {method:'POST', body:fd});
-      if(res.ok){ 
-        alert('Programme téléversé avec succès!'); 
-        document.getElementById('fileInput').value='';
-        listPrograms();
-      } else {
-        alert('Échec du téléversement');
-      }
-    };
-
-    // Upload firmware to /updates/
+    // Upload firmware to /updates/ (always renamed to firmware.bin)
     document.getElementById('uploadFirmwareForm').onsubmit=async (e)=>{
       e.preventDefault();
       const f=document.getElementById('firmwareFileInput').files[0];
@@ -257,12 +230,15 @@
         alert('Le fichier doit avoir l\'extension .bin');
         return;
       }
+      
+      // Always rename to firmware.bin
       const fd=new FormData();
-      fd.append('file', f, f.name);
+      fd.append('file', f, 'firmware.bin');
+      
       alert('Téléversement du firmware en cours... Cela peut prendre quelques secondes.');
       const res=await fetch('/upload_to?dest=/updates', {method:'POST', body:fd});
       if(res.ok){ 
-        alert('Firmware téléversé avec succès dans /updates/!'); 
+        alert('Firmware téléversé avec succès dans /updates/firmware.bin!'); 
         document.getElementById('firmwareFileInput').value='';
         listOtaCandidates();
       } else {
@@ -272,27 +248,15 @@
 
     // Apply OTA update (immediate via WiFi)
     document.getElementById('applyOta').onclick=async ()=>{
-      const file=document.getElementById('otaFiles').value;
-      if(!file) return alert('Sélectionnez un fichier firmware');
-      if(!confirm('⚡ MISE À JOUR OTA IMMÉDIATE via WiFi\n\nFichier: '+file+'\n\n⚠️ RISQUES:\n- Échec si signal WiFi faible\n- ESP32 peut devenir inaccessible si erreur réseau\n\n✅ RECOMMANDÉ: Utiliser "Appliquer au Redémarrage (SD)" à la place\n\nContinuer quand même avec OTA immédiat?')) return;
-      const res=await fetch('/apply_ota', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:'/updates/'+file})});
+      if(!confirm('⚡ MISE À JOUR OTA IMMÉDIATE via WiFi\n\nFichier: firmware.bin\n\n⚠️ RISQUES:\n- Échec si signal WiFi faible\n- ESP32 peut devenir inaccessible si erreur réseau\n\n✅ RECOMMANDÉ: Utiliser "Appliquer au Redémarrage (SD)" à la place\n\nContinuer quand même avec OTA immédiat?')) return;
+      const res=await fetch('/apply_ota', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:'/updates/firmware.bin'})});
       const txt=await res.text();
       alert(txt);
     }
 
     // Apply SD update (scheduled for next boot - safer method)
     document.getElementById('applySdUpdate').onclick=async ()=>{
-      const file=document.getElementById('otaFiles').value;
-      if(!file) return alert('Sélectionnez un fichier firmware');
-      
-      // Check if file is firmware.bin (required for SD update)
-      if(file !== 'firmware.bin') {
-        if(!confirm('⚠️ ATTENTION: Le fichier doit s\'appeler "firmware.bin"\n\nFichier sélectionné: '+file+'\n\nVoulez-vous continuer quand même?\n(La mise à jour échouera si le fichier n\'est pas nommé firmware.bin)')) {
-          return;
-        }
-      }
-      
-      if(!confirm('💾 MISE À JOUR VIA CARTE SD\n\nFichier: '+file+'\n\n✅ AVANTAGES:\n- Appliquée au prochain boot (pas de risque WiFi)\n- Retry automatique si échec\n- Plus sûr que OTA WiFi\n\nL\'ESP32 va redémarrer maintenant et appliquer la mise à jour.\n\nContinuer?')) return;
+      if(!confirm('💾 MISE À JOUR VIA CARTE SD\n\nFichier: firmware.bin\n\n✅ AVANTAGES:\n- Appliquée au prochain boot (pas de risque WiFi)\n- Retry automatique si échec\n- Plus sûr que OTA WiFi\n\nL\'ESP32 va redémarrer maintenant et appliquer la mise à jour.\n\nContinuer?')) return;
       
       alert('Création du marqueur .pending et redémarrage...');
       const res=await fetch('/apply_sd_update', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})});
@@ -302,13 +266,18 @@
 
     function loadAll(){
       listHtmlFiles();
-      listPrograms();
       listLogs();
       listOtaCandidates();
     }
 
-    // Initial load
-    loadAll();
+    // Initial load and set default expanded state
+    window.addEventListener('DOMContentLoaded', function() {
+      loadAll();
+      // Set initial heights for expanded sections
+      document.getElementById('logs-content').style.maxHeight = '2000px';
+      document.getElementById('html-content').style.maxHeight = '2000px';
+    });
   </script>
+  <div class="build-footer">Build: v1.6.1 - 2025-12-17 14:30</div>
 </body>
 </html>

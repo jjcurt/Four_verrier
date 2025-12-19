@@ -115,6 +115,19 @@
             padding: 40px;
             color: #999;
         }
+        .build-footer {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            padding: 4px 12px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 10px;
+            font-family: monospace;
+            border-top-left-radius: 6px;
+            z-index: 9999;
+            pointer-events: none;
+        }
         .editor-section {
             display: none;
             margin-top: 20px;
@@ -147,6 +160,148 @@
             margin-top: 0;
             color: #2e7d32;
         }
+        .toggle-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-bottom: 15px;
+            width: 100%;
+            text-align: left;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .toggle-button:hover {
+            background: #45a049;
+        }
+        .toggle-button .arrow {
+            transition: transform 0.3s ease;
+        }
+        .toggle-button.collapsed .arrow {
+            transform: rotate(-90deg);
+        }
+        .collapsible-content {
+            max-height: 2000px;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out;
+        }
+        .collapsible-content.collapsed {
+            max-height: 0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .step-container {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            background: #f9f9f9;
+            position: relative;
+        }
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .step-title {
+            font-weight: bold;
+            color: #333;
+        }
+        .remove-step-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        .remove-step-btn:hover {
+            background: #da190b;
+        }
+        .add-step-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .add-step-btn:hover {
+            background: #45a049;
+        }
+        .section-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #333;
+            margin: 20px 0 10px 0;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #4CAF50;
+        }
+        .help-text {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 3px;
+        }
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #ddd;
+        }
+        .tab {
+            padding: 10px 20px;
+            background: #f5f5f5;
+            border: none;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            font-weight: bold;
+            color: #666;
+        }
+        .tab.active {
+            background: #fff3e0;
+            color: #FF9800;
+            border-bottom: 2px solid #FF9800;
+        }
+        .tab:hover:not(.active) {
+            background: #e8e8e8;
+        }
+        .editor-mode {
+            display: none;
+        }
+        .editor-mode.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -159,22 +314,91 @@
         <div class="card">
             <h2>Programmes disponibles</h2>
             
-            <div class="info-box">
-                <h3>ℹ️ Format des programmes</h3>
-                <p>Les programmes sont stockés au format JSON avec des étapes (steps) définissant les paramètres de cuisson.</p>
-                <p><strong>Champs requis pour chaque étape :</strong></p>
-                <ul style="margin: 10px 0; padding-left: 20px;">
-                    <li><code>targetTemp</code>: Température cible (°C)</li>
-                    <li><code>rampRate</code>: Vitesse de montée (°C/min, 0 = palier uniquement)</li>
-                    <li><code>withRamp</code>: true si montée en température, false sinon</li>
-                    <li><code>holdTime</code>: Durée de maintien (minutes)</li>
-                    <li><code>useSSR2</code>: true pour utiliser SSR2, false sinon</li>
-                </ul>
-                <p><strong>Exemple :</strong></p>
-                <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">{"name":"Test","numSteps":2,"steps":[
-  {"targetTemp":500,"rampRate":100,"withRamp":true,"holdTime":30,"useSSR2":false},
-  {"targetTemp":0,"rampRate":50,"withRamp":false,"holdTime":0,"useSSR2":false}
+            <button class="toggle-button" onclick="toggleDocumentation()" id="toggleDocBtn">
+                <span>📖 Documentation - Format des programmes (cliquez pour ouvrir/fermer)</span>
+                <span class="arrow">▼</span>
+            </button>
+            
+            <div class="collapsible-content collapsed" id="documentationContent">
+                <div class="info-box">
+                    <h3>ℹ️ Format des programmes</h3>
+                    <p>Les programmes sont stockés au format JSON avec des étapes (steps) définissant les paramètres de cuisson.</p>
+                    
+                    <p><strong>Champs du programme :</strong></p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li><code>name</code>: Nom du programme</li>
+                        <li><code>numSteps</code>: Nombre d'étapes</li>
+                        <li><code>manualMode</code> (optionnel): true pour mode manuel (boucle ouverte, PID désactivé)</li>
+                        <li><code>manualPWM</code> (optionnel): PWM fixe 0-1023 en mode manuel</li>
+                        <li><code>disablePidReset</code> (optionnel, v1.6.1): true pour désactiver les resets PID entre étapes (meilleure continuité, risque de dépassement)</li>
+                    </ul>
+                    
+                    <p><strong>Logging de données - v1.6.0 :</strong></p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li><code>enableUserLog</code> (optionnel): true pour log utilisateur (macroscopique, 6 colonnes, défaut: 30s)</li>
+                        <li><code>enableTestLog</code> (optionnel): true pour log test PID (18 colonnes + diagnostics PID, défaut: 5s)</li>
+                        <li><code>enableMaintenanceLog</code> (optionnel): true pour log maintenance (21 colonnes + debug, défaut: 2s)</li>
+                        <li><code>enableDataLog</code> (déprécié mais accepté): équivalent à enableTestLog pour compatibilité</li>
+                        <li><code>dataLogInterval</code> (optionnel): Période d'échantillonnage en ms (défaut selon type de log)</li>
+                        <li><code>adaptiveLogging</code> (optionnel): true pour échantillonnage adaptatif intelligent (tous types)</li>
+                        <li><code>adaptiveTempDelta</code> (optionnel): Seuil de changement de température en °C (défaut: 1.0)</li>
+                        <li><code>adaptiveDerivDelta</code> (optionnel): Seuil de changement de dérivée en °C/min (défaut: 2.0)</li>
+                        <li><code>adaptivePwmDelta</code> (optionnel): Seuil de changement de PWM (défaut: 100)</li>
+                        <li><code>adaptiveMinInterval</code> (optionnel): Intervalle minimum entre échantillons en ms (défaut: 5000)</li>
+                    </ul>
+                    
+                    <p><strong>⚠️ IMPORTANT - Un seul type de log actif à la fois :</strong></p>
+                    <p style="font-size: 0.95em; color: #d32f2f; background: #ffebee; padding: 10px; border-radius: 4px;">
+                    Pour garantir la robustesse du système, <strong>un seul fichier log peut être ouvert simultanément</strong>. 
+                    Si plusieurs champs enableXxxLog sont à true, la priorité est : User > Test > Maintenance. 
+                    Pour éviter toute confusion, <strong>activez un seul type de log par programme</strong>.
+                    </p>
+                    
+                    <p><strong>Types de logs :</strong></p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li><strong>User Log</strong> (user_*.csv) : Vue macroscopique pour les verriers (6 colonnes : Time, Temp, Target, SSR2_PWM, Phase, Reason)</li>
+                        <li><strong>Test Log</strong> (test_*.csv) : Tests de tuning PID (18 colonnes : + Kp, Ki, Kd, Error, Pterm, Iterm, Dterm, EffectiveHoldSec)</li>
+                        <li><strong>Maintenance Log</strong> (maint_*.csv) : Debug approfondi (21 colonnes : + FilteredTemp, StabilizingTimeSec, InitialBoost)</li>
+                    </ul>
+                    
+                    <p><strong>Champs de chaque étape :</strong></p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li><code>targetTemp</code>: Température cible (°C)</li>
+                        <li><code>rampRate</code>: Vitesse de montée (°C/min, 0 = palier uniquement)</li>
+                        <li><code>withRamp</code>: true si montée en température, false sinon</li>
+                        <li><code>holdTime</code>: Durée de maintien (minutes)</li>
+                    </ul>
+                    
+                    <p><strong>Exemple production (User Log) :</strong></p>
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">{"name":"Production_Verre","numSteps":3,"enableUserLog":true,"dataLogInterval":30000,"adaptiveLogging":true,"steps":[
+  {"targetTemp":520,"rampRate":100,"withRamp":true,"holdTime":240},
+  {"targetTemp":480,"rampRate":50,"withRamp":false,"holdTime":120},
+  {"targetTemp":0,"rampRate":30,"withRamp":false,"holdTime":0}
 ]}</pre>
+                    
+                    <p><strong>Exemple tuning PID (Test Log) :</strong></p>
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">{"name":"PID_Tuning_Test","numSteps":1,"enableTestLog":true,"dataLogInterval":5000,"steps":[
+  {"targetTemp":200,"rampRate":100,"withRamp":true,"holdTime":60}
+]}</pre>
+                    
+                    <p><strong>Exemple identification boucle ouverte (Maintenance Log) :</strong></p>
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">{"name":"OpenLoop_PWM50_Debug","manualMode":true,"manualPWM":512,"enableMaintenanceLog":true,"dataLogInterval":2000,"adaptiveLogging":true,"numSteps":1,"steps":[
+  {"targetTemp":0,"rampRate":0,"withRamp":false,"holdTime":60}
+]}</pre>
+                    
+                    <p><strong>💡 Note sur l'échantillonnage adaptatif :</strong></p>
+                    <p style="font-size: 0.95em; color: #555;">
+                    Le mode <code>adaptiveLogging</code> réduit drastiquement le volume de données (~95-97%) tout en capturant les événements critiques :
+                    points d'inflexion, changements significatifs de température/PWM, zones de stabilisation. Idéal pour les tests expérimentaux longs
+                    et les programmes de production (12-48h) où seuls les événements importants doivent être archivés. Compatible avec les 3 types de logs.
+                    </p>
+                    
+                    <p><strong>📚 Documentation complète :</strong></p>
+                    <p style="font-size: 0.95em;">
+                    Pour plus de détails sur les formats CSV, l'analyse des logs (Excel/Python) et les stratégies d'échantillonnage,
+                    consultez <code>docs/DATA_LOGGING_v1.6.0.md</code> dans le repository firmware.
+                    </p>
+                </div>
             </div>
 
             <ul class="program-list" id="programList">
@@ -193,23 +417,146 @@
 
             <div class="editor-section" id="editorSection">
                 <h3>✏️ Créer un nouveau programme</h3>
-                <p>Entrez le contenu JSON du programme :</p>
-                <textarea id="programEditor" placeholder='{
+                
+                <!-- Tabs for switching between form and JSON mode -->
+                <div class="tabs">
+                    <button class="tab active" onclick="switchEditorMode('form')">Mode Formulaire</button>
+                    <button class="tab" onclick="switchEditorMode('json')">Mode JSON</button>
+                </div>
+                
+                <!-- Form Mode -->
+                <div class="editor-mode active" id="formMode">
+                    <form id="programForm">
+                        <!-- Basic Info -->
+                        <div class="section-title">📋 Informations générales</div>
+                        <div class="form-group">
+                            <label for="progName">Nom du programme *</label>
+                            <input type="text" id="progName" required placeholder="Ex: Cuisson_Emaux_520C">
+                            <div class="help-text">Le nom sera utilisé pour le fichier (extension .json ajoutée automatiquement)</div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="manualMode" onchange="toggleManualMode()">
+                                    Mode manuel (boucle ouverte)
+                                </label>
+                                <div class="help-text">Désactive le PID, utilise un PWM fixe</div>
+                            </div>
+                            <div class="form-group" id="manualPWMGroup" style="display: none;">
+                                <label for="manualPWM">PWM fixe (0-1023)</label>
+                                <input type="number" id="manualPWM" min="0" max="1023" value="512">
+                            </div>
+                        </div>
+                        
+                        <!-- Logging Configuration -->
+                        <div class="section-title">📊 Configuration des logs</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="enableUserLog">
+                                    Log Utilisateur (macroscopique)
+                                </label>
+                                <div class="help-text">6 colonnes, intervalle par défaut: 30s</div>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="enableTestLog">
+                                    Log Test PID (détaillé)
+                                </label>
+                                <div class="help-text">18 colonnes + diagnostics PID, par défaut: 5s</div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="enableMaintenanceLog">
+                                    Log Maintenance (debug)
+                                </label>
+                                <div class="help-text">21 colonnes + détails filtrage, par défaut: 2s</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="dataLogInterval">Intervalle de log (ms)</label>
+                                <input type="number" id="dataLogInterval" min="500" max="60000" step="500" placeholder="Auto selon type">
+                                <div class="help-text">Laissez vide pour utiliser la valeur par défaut</div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="adaptiveLogging">
+                                Échantillonnage adaptatif intelligent
+                            </label>
+                            <div class="help-text">Réduit le volume de données de ~95% en capturant uniquement les événements critiques</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="disablePidReset">
+                                Désactiver les resets PID entre étapes
+                            </label>
+                            <div class="help-text">⚠️ Expérimental (v1.6.1) : Maintient l'intégrale PID lors des transitions (meilleure continuité, risque de dépassement)</div>
+                        </div>
+                        
+                        <div id="adaptiveParams" style="display: none; padding-left: 20px;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="adaptiveTempDelta">Seuil température (°C)</label>
+                                    <input type="number" id="adaptiveTempDelta" step="0.1" value="1.0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="adaptiveDerivDelta">Seuil dérivée (°C/min)</label>
+                                    <input type="number" id="adaptiveDerivDelta" step="0.1" value="2.0">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="adaptivePwmDelta">Seuil PWM (0-1023)</label>
+                                    <input type="number" id="adaptivePwmDelta" min="0" max="1023" value="100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="adaptiveMinInterval">Intervalle minimum (ms)</label>
+                                    <input type="number" id="adaptiveMinInterval" min="1000" max="60000" step="1000" value="5000">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Program Steps -->
+                        <div class="section-title">🔥 Étapes du programme</div>
+                        <div id="stepsContainer"></div>
+                        <button type="button" class="add-step-btn" onclick="addStep()">➕ Ajouter une étape</button>
+                        
+                        <!-- Action Buttons -->
+                        <div style="margin-top: 25px; display: flex; gap: 10px;">
+                            <button type="button" class="button button-success" onclick="saveFromForm()">💾 Enregistrer</button>
+                            <button type="button" class="button" onclick="previewJSON()">👁️ Prévisualiser JSON</button>
+                            <button type="button" class="button" onclick="toggleEditor()">❌ Annuler</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- JSON Mode -->
+                <div class="editor-mode" id="jsonMode">
+                    <p>Entrez le contenu JSON du programme :</p>
+                    <textarea id="programEditor" placeholder='{
   "name": "MonProgramme",
   "numSteps": 1,
+  "enableTestLog": true,
+  "dataLogInterval": 5000,
   "steps": [
     {
       "targetTemp": 500,
       "rampRate": 100,
       "withRamp": true,
-      "holdTime": 30,
-      "useSSR2": false
+      "holdTime": 30
     }
   ]
 }'></textarea>
-                <div style="margin-top: 15px; display: flex; gap: 10px;">
-                    <button class="button button-success" onclick="saveNewProgram()">Enregistrer</button>
-                    <button class="button" onclick="toggleEditor()">Annuler</button>
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
+                        <button class="button button-success" onclick="saveNewProgram()">Enregistrer</button>
+                        <button class="button" onclick="toggleEditor()">Annuler</button>
+                    </div>
                 </div>
             </div>
 
@@ -221,11 +568,232 @@
 
     <script>
         let programs = [];
+        let stepCounter = 0;
+
+        // Toggle between form and JSON editor modes
+        function switchEditorMode(mode) {
+            const formMode = document.getElementById('formMode');
+            const jsonMode = document.getElementById('jsonMode');
+            const tabs = document.querySelectorAll('.tab');
+            
+            if (mode === 'form') {
+                formMode.classList.add('active');
+                jsonMode.classList.remove('active');
+                tabs[0].classList.add('active');
+                tabs[1].classList.remove('active');
+            } else {
+                formMode.classList.remove('active');
+                jsonMode.classList.add('active');
+                tabs[0].classList.remove('active');
+                tabs[1].classList.add('active');
+            }
+        }
+
+        // Toggle manual mode fields
+        function toggleManualMode() {
+            const manualMode = document.getElementById('manualMode').checked;
+            const manualPWMGroup = document.getElementById('manualPWMGroup');
+            manualPWMGroup.style.display = manualMode ? 'block' : 'none';
+        }
+
+        // Toggle adaptive logging parameters
+        document.getElementById('adaptiveLogging').addEventListener('change', function() {
+            const adaptiveParams = document.getElementById('adaptiveParams');
+            adaptiveParams.style.display = this.checked ? 'block' : 'none';
+        });
+
+        // Add a new step to the form
+        function addStep() {
+            stepCounter++;
+            const container = document.getElementById('stepsContainer');
+            const stepDiv = document.createElement('div');
+            stepDiv.className = 'step-container';
+            stepDiv.id = 'step-' + stepCounter;
+            stepDiv.innerHTML = `
+                <div class="step-header">
+                    <span class="step-title">Étape ${stepCounter}</span>
+                    <button type="button" class="remove-step-btn" onclick="removeStep(${stepCounter})">🗑️ Supprimer</button>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Température cible (°C) *</label>
+                        <input type="number" name="targetTemp-${stepCounter}" step="0.1" required placeholder="Ex: 520">
+                    </div>
+                    <div class="form-group">
+                        <label>Vitesse de montée (°C/min)</label>
+                        <input type="number" name="rampRate-${stepCounter}" step="0.1" value="100" placeholder="0 = pas de rampe">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" name="withRamp-${stepCounter}" checked>
+                            Rampe de montée active
+                        </label>
+                        <div class="help-text">Décocher pour un palier direct</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Temps de maintien (minutes)</label>
+                        <input type="number" name="holdTime-${stepCounter}" min="0" value="30" placeholder="0 = pas de maintien">
+                    </div>
+                </div>
+            `;
+            container.appendChild(stepDiv);
+        }
+
+        // Remove a step from the form
+        function removeStep(id) {
+            const stepDiv = document.getElementById('step-' + id);
+            if (stepDiv) {
+                stepDiv.remove();
+            }
+        }
+
+        // Generate JSON from form data
+        function generateProgramJSON() {
+            const program = {
+                name: document.getElementById('progName').value.trim(),
+                numSteps: 0
+            };
+
+            // Manual mode
+            if (document.getElementById('manualMode').checked) {
+                program.manualMode = true;
+                const manualPWM = document.getElementById('manualPWM').value;
+                program.manualPWM = manualPWM ? parseInt(manualPWM) : 512;
+            }
+
+            // Logging configuration
+            if (document.getElementById('enableUserLog').checked) {
+                program.enableUserLog = true;
+            }
+            if (document.getElementById('enableTestLog').checked) {
+                program.enableTestLog = true;
+            }
+            if (document.getElementById('enableMaintenanceLog').checked) {
+                program.enableMaintenanceLog = true;
+            }
+
+            const logInterval = document.getElementById('dataLogInterval').value;
+            if (logInterval && logInterval.trim() !== '') {
+                program.dataLogInterval = parseInt(logInterval);
+            }
+
+            if (document.getElementById('adaptiveLogging').checked) {
+                program.adaptiveLogging = true;
+                
+                const tempDelta = document.getElementById('adaptiveTempDelta').value;
+                const derivDelta = document.getElementById('adaptiveDerivDelta').value;
+                const pwmDelta = document.getElementById('adaptivePwmDelta').value;
+                const minInterval = document.getElementById('adaptiveMinInterval').value;
+                
+                program.adaptiveTempDelta = tempDelta ? parseFloat(tempDelta) : 1.0;
+                program.adaptiveDerivDelta = derivDelta ? parseFloat(derivDelta) : 2.0;
+                program.adaptivePwmDelta = pwmDelta ? parseInt(pwmDelta) : 100;
+                program.adaptiveMinInterval = minInterval ? parseInt(minInterval) : 5000;
+            }
+            
+            // PID reset control (v1.6.1)
+            if (document.getElementById('disablePidReset').checked) {
+                program.disablePidReset = true;
+            }
+
+            // Collect steps - add as array at the end
+            const stepsArray = [];
+            const stepsContainer = document.getElementById('stepsContainer');
+            const steps = stepsContainer.querySelectorAll('.step-container');
+            
+            steps.forEach(stepDiv => {
+                const id = stepDiv.id.split('-')[1];
+                
+                const targetTempValue = document.querySelector(`input[name="targetTemp-${id}"]`).value;
+                const rampRateValue = document.querySelector(`input[name="rampRate-${id}"]`).value;
+                const holdTimeValue = document.querySelector(`input[name="holdTime-${id}"]`).value;
+                
+                const step = {
+                    targetTemp: targetTempValue ? parseFloat(targetTempValue) : 0,
+                    rampRate: rampRateValue ? parseFloat(rampRateValue) : 0,
+                    withRamp: document.querySelector(`input[name="withRamp-${id}"]`).checked,
+                    holdTime: holdTimeValue ? parseInt(holdTimeValue) : 0
+                };
+                stepsArray.push(step);
+            });
+
+            program.numSteps = stepsArray.length;
+            program.steps = stepsArray;
+
+            return program;
+        }
+
+        // Preview JSON before saving
+        function previewJSON() {
+            try {
+                const program = generateProgramJSON();
+                const json = JSON.stringify(program, null, 2);
+                alert('Aperçu du JSON:\n\n' + json);
+            } catch (e) {
+                alert('Erreur lors de la génération du JSON: ' + e.message);
+            }
+        }
+
+        // Save program from form
+        async function saveFromForm() {
+            try {
+                const program = generateProgramJSON();
+                
+                if (!program.name) {
+                    alert('Veuillez entrer un nom pour le programme');
+                    return;
+                }
+
+                if (program.numSteps === 0) {
+                    alert('Veuillez ajouter au moins une étape');
+                    return;
+                }
+                
+                // Convert program to compact JSON string (no formatting)
+                const jsonContent = JSON.stringify(program);
+                
+                // Send to backend
+                const res = await fetch('/api/save_program', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name: program.name,
+                        content: jsonContent
+                    })
+                });
+                
+                if (res.ok) {
+                    alert('Programme créé avec succès !');
+                    toggleEditor();
+                    loadPrograms();
+                    // Reset form
+                    document.getElementById('programForm').reset();
+                    document.getElementById('stepsContainer').innerHTML = '';
+                    stepCounter = 0;
+                    addStep(); // Re-add one empty step
+                } else {
+                    const errorText = await res.text();
+                    alert('Erreur lors de la création du programme: ' + errorText);
+                }
+            } catch (e) {
+                alert('Erreur: ' + e.message);
+            }
+        }
+
+        // Initialize with one step
+        window.addEventListener('load', function() {
+            addStep();
+        });
+
 
         async function loadPrograms() {
             try {
                 const res = await fetch('/api/programs');
-                programs = await res.json();
+                const allFiles = await res.json();
+                // Filter to show only .json files
+                programs = allFiles.filter(name => name.toLowerCase().endsWith('.json'));
                 renderPrograms();
             } catch (e) {
                 console.error('Failed to load programs:', e);
@@ -368,5 +936,18 @@
         // Load programs on page load
         loadPrograms();
     </script>
+    
+    <script>
+        // Toggle documentation section
+        function toggleDocumentation() {
+            const content = document.getElementById('documentationContent');
+            const button = document.getElementById('toggleDocBtn');
+            
+            content.classList.toggle('collapsed');
+            button.classList.toggle('collapsed');
+        }
+    </script>
+    
+    <div class="build-footer">Build: v1.6.1 - 2025-12-17 14:30</div>
 </body>
 </html>

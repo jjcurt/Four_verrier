@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - Four Verrier</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+        }
+
+        .back-link {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .back-link:hover {
+            color: #764ba2;
+        }
+
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h2 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #555;
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="password"],
+        .form-group input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group small {
+            display: block;
+            color: #888;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            margin-left: 10px;
+        }
+
+        .current-value {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 5px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .status-message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #0d47a1;
+        }
+
+        @media (max-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+        .build-footer {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            padding: 4px 12px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 10px;
+            font-family: monospace;
+            border-top-left-radius: 6px;
+            z-index: 9999;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ Configuration Système</h1>
+            <a href="/" class="back-link">← Retour</a>
+        </div>
+
+        <!-- WiFi Configuration Section -->
+        <div class="section">
+            <h2>📶 Configuration WiFi</h2>
+            <div class="info-box">
+                Les modifications WiFi nécessitent un redémarrage du système.<br>
+                Si vous ne modifiez pas le SSID, utilisez le bouton "Redémarrer" pour éviter toute erreur.
+            </div>
+            <form id="wifiForm">
+                <div class="form-group">
+                    <label for="ssid">SSID (Nom du réseau WiFi)</label>
+                    <input type="text" id="ssid" name="ssid" placeholder="Nom du réseau WiFi">
+                    <div class="current-value" id="currentSsid">Chargement...</div>
+                </div>
+                <div class="form-group">
+                    <label for="password">Mot de passe WiFi</label>
+                    <input type="password" id="password" name="password" placeholder="Laisser vide pour ne pas changer">
+                    <small>Laissez vide pour conserver le mot de passe actuel</small>
+                </div>
+                <button type="submit" class="btn">💾 Enregistrer & Redémarrer</button>
+                <button type="button" class="btn btn-secondary" onclick="rebootSystem()">🔄 Redémarrer uniquement</button>
+                <div class="status-message" id="wifiStatus"></div>
+            </form>
+        </div>
+
+        <!-- PID Default Parameters Section -->
+        <div class="section">
+            <h2>🎛️ Paramètres PID par défaut</h2>
+            <div class="info-box">
+                Ces valeurs sont utilisées comme paramètres par défaut lors du démarrage. Elles peuvent être surchargées par les programmes individuels.
+                <br><strong>Valeurs validées (v1.5.12):</strong> Kp=20.0, Ki=0.05, Kd=5.0
+                <br><br><strong>📖 Rôle des gains PID :</strong>
+                <ul style="margin: 8px 0 0 20px; font-size: 0.9em;">
+                    <li><strong>Kp (Proportionnel)</strong> : Réactivité immédiate à l'erreur de température. Plus élevé = réponse plus forte mais risque d'oscillations.</li>
+                    <li><strong>Ki (Intégral)</strong> : Corrige l'erreur résiduelle accumulée dans le temps. Élimine la dérive mais peut créer du dépassement.</li>
+                    <li><strong>Kd (Dérivé)</strong> : Anticipe les variations et amortit les changements brusques. Réduit les dépassements mais amplifie le bruit.</li>
+                </ul>
+            </div>
+            <form id="pidForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="pidKp">Gain Proportionnel (Kp)</label>
+                        <input type="number" id="pidKp" name="pidKp" step="0.1" min="0" placeholder="8.0">
+                        <small>Réactivité</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="pidKi">Gain Intégral (Ki)</label>
+                        <input type="number" id="pidKi" name="pidKi" step="0.01" min="0" placeholder="0.05">
+                        <small>Correction erreur statique</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="pidKd">Gain Dérivé (Kd)</label>
+                        <input type="number" id="pidKd" name="pidKd" step="0.1" min="0" placeholder="50.0">
+                        <small>Amortissement</small>
+                    </div>
+                </div>
+                <h3>⏱️ Paramètres de Stabilisation</h3>
+                <div class="info-box" style="margin-bottom: 15px;">
+                    <strong>Phase STABILIZING :</strong> Après une rampe de montée, le système attend que la température se stabilise avant de démarrer la phase HOLD (maintien).<br>
+                    Ces paramètres contrôlent les critères de stabilisation et les timeouts de sécurité.
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="stabilizingTimeoutMinutes">Timeout STABILIZING (min)</label>
+                        <input type="number" id="stabilizingTimeoutMinutes" name="stabilizingTimeoutMinutes" step="1" min="1" max="60" placeholder="20">
+                        <small>Temps max d'attente avant forcer HOLD (défaut: 20 min)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="stabilizingToleranceStrict">Tolérance stricte (°C)</label>
+                        <input type="number" id="stabilizingToleranceStrict" name="stabilizingToleranceStrict" step="0.1" min="0.1" max="10" placeholder="2.0">
+                        <small>±°C pour démarrer HOLD immédiatement (défaut: ±2°C)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="stabilizingToleranceWarning">Tolérance timeout (°C)</label>
+                        <input type="number" id="stabilizingToleranceWarning" name="stabilizingToleranceWarning" step="0.1" min="0.1" max="20" placeholder="5.0">
+                        <small>±°C acceptable si timeout atteint (défaut: ±5°C)</small>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="stabilizingToleranceCritical">Tolérance critique (°C)</label>
+                        <input type="number" id="stabilizingToleranceCritical" name="stabilizingToleranceCritical" step="1" min="10" max="100" placeholder="50">
+                        <small>Seuil sécurité</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="stabilizingStableDurationMs">Durée stabilité (ms)</label>
+                        <input type="number" id="stabilizingStableDurationMs" name="stabilizingStableDurationMs" step="1000" min="1000" max="120000" placeholder="30000">
+                        <small>Temps stable requis</small>
+                    </div>
+                </div>
+                <h3>📊 Estimation Timeline (Vue Programme)</h3>
+                <div class="info-box" style="margin-bottom: 15px;">
+                    Ces paramètres servent à calculer la durée estimée d'un programme dans l'interface web (vue programme avec blocs).<br>
+                    Ils n'affectent pas la régulation, seulement l'affichage prévisionnel.
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="estimatedHeatingRate">Vitesse chauffe libre (°C/min)</label>
+                        <input type="number" id="estimatedHeatingRate" name="estimatedHeatingRate" step="1" min="10" max="100" placeholder="50">
+                        <small>Montée max sans rampe (défaut: 39-50°C/min)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="estimatedCoolingRate">Vitesse refroidissement (°C/min)</label>
+                        <input type="number" id="estimatedCoolingRate" name="estimatedCoolingRate" step="1" min="5" max="50" placeholder="25">
+                        <small>Descente naturelle (défaut: 21-25°C/min)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="estimatedStabilizationTime">Temps stabilisation (min)</label>
+                        <input type="number" id="estimatedStabilizationTime" name="estimatedStabilizationTime" step="0.5" min="1" max="10" placeholder="3">
+                        <small>Durée phase STABILIZING (défaut: 3 min)</small>
+                    </div>
+                </div>
+                <h3>🔥 Paramètres Phase HOLD</h3>
+                <div class="info-box" style="margin-bottom: 15px;">
+                    <strong>Zone de cuisson :</strong> Définit la plage de température considérée comme "cuisson effective".<br>
+                    Exemple : cible 800°C, marge 20°C → zone efficace = 780-820°C. Le temps passé dans cette zone est comptabilisé comme temps de cuisson effectif.
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cookingZoneMargin">Marge zone de cuisson (°C)</label>
+                        <input type="number" id="cookingZoneMargin" name="cookingZoneMargin" step="1" min="5" max="50" placeholder="20">
+                        <small>±°C autour de la cible (défaut: ±20°C)</small>
+                    </div>
+                </div>
+                <h3>📈 Paramètres Graphe TFT</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="idleGraphUpdateInterval">Intervalle graphe IDLE (ms)</label>
+                        <input type="number" id="idleGraphUpdateInterval" name="idleGraphUpdateInterval" step="1000" min="1000" max="30000" placeholder="5000">
+                        <small>Échantillonnage en mode repos (5000ms = 25min de plage)</small>
+                    </div>
+                </div>
+                <h3>🔧 Contrôle Avancé du PID</h3>
+                <div class="info-box">
+                    <strong>⚠️ Paramètre expérimental (v1.6.1)</strong><br>
+                    Par défaut, le terme intégral du PID est réduit de 50% lors des transitions d'étapes (passage en phase HOLD) pour éviter les accumulations et dépassements.<br>
+                    <strong>Désactiver les resets PID</strong> permet de maintenir l'intégrale intacte entre les étapes, ce qui peut améliorer la stabilité si les gains sont bien réglés, mais peut aussi causer des dépassements si l'intégrale s'accumule trop.
+                </div>
+                <div class="form-group">
+                    <label for="disablePidReset">
+                        <input type="checkbox" id="disablePidReset" name="disablePidReset" style="width: auto; display: inline; margin-right: 8px;">
+                        Désactiver les resets PID lors des changements d'étape
+                    </label>
+                    <small style="display: block; margin-top: 5px;">
+                        ✓ Coché = maintien de l'intégrale PID (meilleure continuité, risque de dépassement)<br>
+                        ✗ Non coché = reset à 50% lors des transitions (comportement par défaut, plus sûr)
+                    </small>
+                </div>
+                <div class="current-value" id="currentPid">Chargement...</div>
+                <button type="submit" class="btn">💾 Enregistrer tous les paramètres</button>
+                <button type="button" class="btn btn-secondary" onclick="loadDefaults()">🔄 Charger valeurs v1.4.9</button>
+                <div class="status-message" id="pidStatus"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Store original SSID for comparison
+        let originalSsid = '';
+
+        // Load current configuration on page load
+        window.onload = function() {
+            loadCurrentConfig();
+        };
+
+        // Load current WiFi and PID configuration
+        function loadCurrentConfig() {
+            // Load WiFi config
+            fetch('/download?path=/config/wifi.json')
+                .then(response => response.ok ? response.text() : Promise.reject('No wifi.json'))
+                .then(text => {
+                    const config = JSON.parse(text);
+                    originalSsid = config.ssid || '';
+                    document.getElementById('ssid').value = originalSsid;
+                    document.getElementById('currentSsid').textContent = 
+                        originalSsid ? `SSID actuel: ${originalSsid}` : 'Aucune configuration WiFi trouvée';
+                })
+                .catch(error => {
+                    originalSsid = '';
+                    document.getElementById('currentSsid').textContent = 'Aucune configuration WiFi trouvée';
+                });
+
+            // Load PID config
+            fetch('/download?path=/config/settings.json')
+                .then(response => response.ok ? response.text() : Promise.reject('No settings.json'))
+                .then(text => {
+                    const config = JSON.parse(text);
+                    if (config.pidKp !== undefined) {
+                        document.getElementById('pidKp').value = config.pidKp;
+                        document.getElementById('pidKi').value = config.pidKi;
+                        document.getElementById('pidKd').value = config.pidKd;
+                        
+                        // Load STABILIZING parameters (v1.4.4)
+                        if (config.stabilizingTimeoutMinutes !== undefined) {
+                            document.getElementById('stabilizingTimeoutMinutes').value = config.stabilizingTimeoutMinutes;
+                            document.getElementById('stabilizingToleranceStrict').value = config.stabilizingToleranceStrict;
+                            document.getElementById('stabilizingToleranceWarning').value = config.stabilizingToleranceWarning;
+                            document.getElementById('stabilizingToleranceCritical').value = config.stabilizingToleranceCritical;
+                            document.getElementById('stabilizingStableDurationMs').value = config.stabilizingStableDurationMs;
+                        }
+                        
+                        // Load timeline estimation parameters (v1.4.7)
+                        if (config.estimatedHeatingRate !== undefined) {
+                            document.getElementById('estimatedHeatingRate').value = config.estimatedHeatingRate;
+                            document.getElementById('estimatedCoolingRate').value = config.estimatedCoolingRate;
+                            document.getElementById('estimatedStabilizationTime').value = config.estimatedStabilizationTime;
+                        }
+                        
+                        // Load HOLD phase parameters (v1.4.7)
+                        if (config.cookingZoneMargin !== undefined) {
+                            document.getElementById('cookingZoneMargin').value = config.cookingZoneMargin;
+                        }
+                        
+                        // Load graph update interval for IDLE mode (v1.5.11)
+                        if (config.idleGraphUpdateInterval !== undefined) {
+                            document.getElementById('idleGraphUpdateInterval').value = config.idleGraphUpdateInterval;
+                        }
+                        
+                        // Load PID reset control (v1.6.1)
+                        if (config.disablePidReset !== undefined) {
+                            document.getElementById('disablePidReset').checked = config.disablePidReset;
+                        }
+                        
+                        document.getElementById('currentPid').textContent = 
+                            `Valeurs actuelles: Kp=${config.pidKp}, Ki=${config.pidKi}, Kd=${config.pidKd}`;
+                    } else {
+                        document.getElementById('currentPid').textContent = 
+                            'Aucune configuration PID trouvée (utilise les valeurs firmware par défaut)';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('currentPid').textContent = 
+                        'Aucune configuration PID trouvée (utilise les valeurs firmware par défaut: Kp=12.0, Ki=0.05, Kd=50.0)';
+                });
+        }
+
+        // Load v7/v1.4.7 validated defaults
+        function loadDefaults() {
+            // PID defaults
+            document.getElementById('pidKp').value = 12.0;
+            document.getElementById('pidKi').value = 0.05;
+            document.getElementById('pidKd').value = 50.0;
+            
+            // STABILIZING defaults
+            document.getElementById('stabilizingTimeoutMinutes').value = 20.0;
+            document.getElementById('stabilizingToleranceStrict').value = 2.0;
+            document.getElementById('stabilizingToleranceWarning').value = 5.0;
+            document.getElementById('stabilizingToleranceCritical').value = 50.0;
+            document.getElementById('stabilizingStableDurationMs').value = 30000;
+            
+            // Timeline estimation defaults (v1.4.9 - measured from TestProd2)
+            document.getElementById('estimatedHeatingRate').value = 39.0;
+            document.getElementById('estimatedCoolingRate').value = 21.0;
+            document.getElementById('estimatedStabilizationTime').value = 3.0;
+            
+            // HOLD phase defaults (v1.4.7)
+            document.getElementById('cookingZoneMargin').value = 20.0;
+            
+            // Graph update interval defaults (v1.5.11)
+            document.getElementById('idleGraphUpdateInterval').value = 5000;
+            
+            // PID reset control defaults (v1.6.1)
+            document.getElementById('disablePidReset').checked = false;
+            
+            showStatus('pidStatus', 'Valeurs v1.4.9 chargées (non enregistrées)', 'success');
+        }
+
+        // Handle WiFi form submission
+        document.getElementById('wifiForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const ssid = document.getElementById('ssid').value.trim();
+            const password = document.getElementById('password').value;
+
+            // Check if SSID is empty
+            if (!ssid) {
+                showStatus('wifiStatus', 'Le SSID ne peut pas être vide', 'error');
+                return;
+            }
+
+            // Check if SSID has actually changed
+            if (ssid === originalSsid && !password) {
+                if (!confirm('⚠️ Aucune modification détectée\n\nLe SSID n\'a pas changé et aucun mot de passe n\'a été saisi.\n\nVoulez-vous simplement redémarrer le système sans modifier la configuration WiFi?\n\n(Utilisez plutôt le bouton "Redémarrer uniquement" pour cela)')) {
+                    return;
+                }
+                // Just reboot without saving
+                rebootSystem();
+                return;
+            }
+
+            // Confirm save
+            let confirmMsg = '⚠️ Sauvegarder la configuration WiFi et redémarrer?\n\n';
+            if (ssid !== originalSsid) {
+                confirmMsg += `SSID: ${originalSsid} → ${ssid}\n`;
+            } else {
+                confirmMsg += `SSID: ${ssid} (inchangé)\n`;
+            }
+            if (password) {
+                confirmMsg += 'Mot de passe: sera mis à jour\n';
+            }
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('ssid', ssid);
+            if (password) formData.append('password', password);
+
+            fetch('/save_wifi', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                showStatus('wifiStatus', 'Configuration WiFi enregistrée. Redémarrage en cours...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 3000);
+            })
+            .catch(error => {
+                showStatus('wifiStatus', 'Erreur lors de la sauvegarde: ' + error, 'error');
+            });
+        });
+
+        // Reboot system without changing WiFi config
+        function rebootSystem() {
+            if (!confirm('🔄 Redémarrer le système maintenant?\n\nLa configuration WiFi ne sera pas modifiée.')) {
+                return;
+            }
+
+            fetch('/reboot', {
+                method: 'POST'
+            })
+            .then(response => response.text())
+            .then(data => {
+                showStatus('wifiStatus', 'Redémarrage en cours... Reconnexion dans 10 secondes.', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 10000);
+            })
+            .catch(error => {
+                showStatus('wifiStatus', 'Redémarrage en cours...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 10000);
+            });
+        }
+
+        // Handle PID form submission
+        document.getElementById('pidForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const pidKp = parseFloat(document.getElementById('pidKp').value);
+            const pidKi = parseFloat(document.getElementById('pidKi').value);
+            const pidKd = parseFloat(document.getElementById('pidKd').value);
+            
+            const stabilizingTimeoutMinutes = parseFloat(document.getElementById('stabilizingTimeoutMinutes').value);
+            const stabilizingToleranceStrict = parseFloat(document.getElementById('stabilizingToleranceStrict').value);
+            const stabilizingToleranceWarning = parseFloat(document.getElementById('stabilizingToleranceWarning').value);
+            const stabilizingToleranceCritical = parseFloat(document.getElementById('stabilizingToleranceCritical').value);
+            const stabilizingStableDurationMs = parseFloat(document.getElementById('stabilizingStableDurationMs').value);
+            
+            const estimatedHeatingRate = parseFloat(document.getElementById('estimatedHeatingRate').value);
+            const estimatedCoolingRate = parseFloat(document.getElementById('estimatedCoolingRate').value);
+            const estimatedStabilizationTime = parseFloat(document.getElementById('estimatedStabilizationTime').value);
+            
+            const cookingZoneMargin = parseFloat(document.getElementById('cookingZoneMargin').value);
+            const idleGraphUpdateInterval = parseInt(document.getElementById('idleGraphUpdateInterval').value);
+            const disablePidReset = document.getElementById('disablePidReset').checked;
+
+            if (isNaN(pidKp) || isNaN(pidKi) || isNaN(pidKd)) {
+                showStatus('pidStatus', 'Veuillez remplir tous les champs PID avec des valeurs numériques valides', 'error');
+                return;
+            }
+
+            if (pidKp < 0 || pidKi < 0 || pidKd < 0) {
+                showStatus('pidStatus', 'Les valeurs PID ne peuvent pas être négatives', 'error');
+                return;
+            }
+            
+            if (isNaN(stabilizingTimeoutMinutes) || isNaN(stabilizingToleranceStrict) || 
+                isNaN(stabilizingToleranceWarning) || isNaN(stabilizingToleranceCritical) || 
+                isNaN(stabilizingStableDurationMs)) {
+                showStatus('pidStatus', 'Veuillez remplir tous les champs STABILIZING avec des valeurs valides', 'error');
+                return;
+            }
+            
+            if (isNaN(estimatedHeatingRate) || isNaN(estimatedCoolingRate) || 
+                isNaN(estimatedStabilizationTime) || isNaN(cookingZoneMargin) || 
+                isNaN(idleGraphUpdateInterval)) {
+                showStatus('pidStatus', 'Veuillez remplir tous les champs Timeline, HOLD et Graphe avec des valeurs valides', 'error');
+                return;
+            }
+
+            const config = {
+                pidKp: pidKp,
+                pidKi: pidKi,
+                pidKd: pidKd,
+                stabilizingTimeoutMinutes: stabilizingTimeoutMinutes,
+                stabilizingToleranceStrict: stabilizingToleranceStrict,
+                stabilizingToleranceWarning: stabilizingToleranceWarning,
+                stabilizingToleranceCritical: stabilizingToleranceCritical,
+                stabilizingStableDurationMs: stabilizingStableDurationMs,
+                estimatedHeatingRate: estimatedHeatingRate,
+                estimatedCoolingRate: estimatedCoolingRate,
+                estimatedStabilizationTime: estimatedStabilizationTime,
+                cookingZoneMargin: cookingZoneMargin,
+                idleGraphUpdateInterval: idleGraphUpdateInterval,
+                disablePidReset: disablePidReset
+            };
+
+            // Save to /config/settings.json
+            fetch('/save_settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.ok ? response.text() : Promise.reject('Erreur serveur'))
+            .then(data => {
+                showStatus('pidStatus', 
+                    `✅ Paramètres PID enregistrés avec succès!\nKp=${pidKp}, Ki=${pidKi}, Kd=${pidKd}\n\nSeront appliqués au prochain démarrage ou lors du chargement d'un programme.`, 
+                    'success');
+                loadCurrentConfig(); // Reload to show updated values
+            })
+            .catch(error => {
+                showStatus('pidStatus', 'Erreur lors de la sauvegarde: ' + error, 'error');
+            });
+        });
+
+        // Show status message
+        function showStatus(elementId, message, type) {
+            const statusElement = document.getElementById(elementId);
+            statusElement.textContent = message;
+            statusElement.className = 'status-message ' + type;
+            statusElement.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusElement.style.display = 'none';
+                }, 5000);
+            }
+        }
+    </script>
+    <div class="build-footer">Build: v1.6.1 - 2025-12-17 14:30</div>
+</body>
+</html>

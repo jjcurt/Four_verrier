@@ -1,0 +1,16 @@
+{
+  "pidKp": 12.0,
+  "pidKi": 0.05,
+  "pidKd": 50.0,
+  "stabilizingTimeoutMinutes": 20.0,
+  "stabilizingToleranceStrict": 2.0,
+  "stabilizingToleranceWarning": 5.0,
+  "stabilizingToleranceCritical": 50.0,
+  "stabilizingStableDurationMs": 30000,
+  "estimatedHeatingRate": 39.0,
+  "estimatedCoolingRate": 21.0,
+  "estimatedStabilizationTime": 3.0,
+  "cookingZoneMargin": 20.0,
+  "idleGraphUpdateInterval": 5000,
+  "disablePidReset": false
+}

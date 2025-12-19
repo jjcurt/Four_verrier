@@ -1,8 +1,6 @@
-# Glass Furnace Controller (ESP32)# Glass Furnace Controller (ESP32)
+# Glass Furnace Controller (ESP32)
 
-
-
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Platform](https://img.shields.io/badge/platform-ESP32-green) ![License](https://img.shields.io/badge/license-Proprietary-red)ESP32-based glass furnace controller with dual SSR control, touchscreen interface, and network connectivity.
+![Version](https://img.shields.io/badge/version-1.6.1-blue) ![Platform](https://img.shields.io/badge/platform-ESP32-green) ![License](https://img.shields.io/badge/license-Proprietary-red)ESP32-based glass furnace controller with dual SSR control, touchscreen interface, and network connectivity.
 
 
 

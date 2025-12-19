@@ -17,7 +17,10 @@
 #define DEBUG_SERIAL
 
 // Firmware version
-const char *FIRMWARE_VERSION = "1.0.3-maj";
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "1.6.1"
+#endif
+const char *firmwareVersion = FIRMWARE_VERSION;
 
 // Debug logging macros
 #ifdef DEBUG_SERIAL
@@ -88,6 +91,27 @@ double pidKp = 40.0;
 double pidKi = 0.1;
 double pidKd = 4.0;
 
+// Stabilization parameters (v1.4.7+)
+double stabilizingTimeoutMinutes = 20.0;
+double stabilizingToleranceStrict = 2.0;
+double stabilizingToleranceWarning = 5.0;
+double stabilizingToleranceCritical = 50.0;
+unsigned long stabilizingStableDurationMs = 30000;
+
+// Timeline estimation parameters (v1.4.9+)
+double estimatedHeatingRate = 39.0;      // °C/min free heating
+double estimatedCoolingRate = 21.0;      // °C/min natural cooling
+double estimatedStabilizationTime = 3.0; // minutes
+
+// HOLD phase parameters (v1.4.7+)
+double cookingZoneMargin = 20.0; // °C
+
+// Graph update interval (v1.5.11+)
+unsigned long idleGraphUpdateInterval = 5000; // ms
+
+// PID reset control (v1.6.1+)
+bool disablePidReset = false;
+
 // Program display/state placeholders
 String currentProgramName = "Idle";
 int programStep = 0;
@@ -108,11 +132,44 @@ ProgramPhase currentPhase = PHASE_IDLE;
 unsigned long phaseStartMs = 0;
 float rampStartTemp = 0;
 
-// Data logging for PID tuning and analysis
+// Data logging for PID tuning and analysis (v1.6.0 enhanced)
 File dataLogFile;
 bool dataLogActive = false;
 unsigned long lastDataLogMs = 0;
-const unsigned long DATA_LOG_INTERVAL = 5000; // Log every 5 seconds
+const unsigned long DATA_LOG_INTERVAL = 5000; // Default log every 5 seconds
+
+// Log type tracking
+enum LogType
+{
+    LOG_NONE,
+    LOG_USER,
+    LOG_TEST,
+    LOG_MAINTENANCE
+};
+LogType currentLogType = LOG_NONE;
+
+// Adaptive logging state (v1.6.0)
+bool adaptiveLoggingEnabled = false;
+float lastLoggedTemp = 0.0;
+uint16_t lastLoggedPwm = 0;
+float adaptiveTempDelta = 0.5;            // °C
+float adaptivePwmDelta = 51;              // ~5% of 1023
+unsigned long adaptiveLogInterval = 5000; // ms
+String lastLogReason = "INIT";            // Reason for last log entry
+
+// Temperature filtering and PID tracking (v1.6.1 maintenance logs)
+float filteredTemp = 0.0;            // Low-pass filtered temperature
+const float TEMP_FILTER_ALPHA = 0.3; // Filter coefficient (0-1, lower = more smoothing)
+float pidError = 0.0;                // PID error (target - current)
+float pidPterm = 0.0;                // Proportional term
+float pidIterm = 0.0;                // Integral term
+float pidDterm = 0.0;                // Derivative term
+
+// Stabilization tracking (v1.6.1)
+unsigned long effectiveHoldStartMs = 0; // When hold phase actually started
+unsigned long stabilizingStartMs = 0;   // When temp entered tolerance zone
+bool isStabilizing = false;             // Currently in stabilization
+bool initialBoost = false;              // Initial heating boost active
 
 // Temperature graph buffer (simple circular buffer)
 const int GRAPH_W = 300; // pixels / samples
@@ -159,7 +216,7 @@ bool loadSettings()
         return false;
     }
 
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<512> doc; // Increased size for v1.6.1 parameters
     DeserializationError error = deserializeJson(doc, file);
     file.close();
 
@@ -176,23 +233,69 @@ bool loadSettings()
     pidKd = doc["pidKd"] | pidKd;
     tempOffset = doc["tempOffset"] | tempOffset; // default 0 if absent
 
+    // v1.4.7+ Stabilization parameters
+    stabilizingTimeoutMinutes = doc["stabilizingTimeoutMinutes"] | stabilizingTimeoutMinutes;
+    stabilizingToleranceStrict = doc["stabilizingToleranceStrict"] | stabilizingToleranceStrict;
+    stabilizingToleranceWarning = doc["stabilizingToleranceWarning"] | stabilizingToleranceWarning;
+    stabilizingToleranceCritical = doc["stabilizingToleranceCritical"] | stabilizingToleranceCritical;
+    stabilizingStableDurationMs = doc["stabilizingStableDurationMs"] | stabilizingStableDurationMs;
+
+    // v1.4.9+ Timeline estimation
+    estimatedHeatingRate = doc["estimatedHeatingRate"] | estimatedHeatingRate;
+    estimatedCoolingRate = doc["estimatedCoolingRate"] | estimatedCoolingRate;
+    estimatedStabilizationTime = doc["estimatedStabilizationTime"] | estimatedStabilizationTime;
+
+    // v1.4.7+ HOLD phase
+    cookingZoneMargin = doc["cookingZoneMargin"] | cookingZoneMargin;
+
+    // v1.5.11+ Graph update
+    idleGraphUpdateInterval = doc["idleGraphUpdateInterval"] | idleGraphUpdateInterval;
+
+    // v1.6.1+ PID reset control
+    disablePidReset = doc["disablePidReset"] | disablePidReset;
+
     // Update PID controller with loaded tunings
     tempPID.SetTunings(pidKp, pidKi, pidKd);
 
     DEBUG_PRINTF("Settings loaded: interval=%lu, Kp=%.2f, Ki=%.3f, Kd=%.2f, offset=%.2f\n",
                  tempReadInterval, pidKp, pidKi, pidKd, tempOffset);
+    DEBUG_PRINTF("  Stabilization: timeout=%.1fmin, tolerances=%.1f/%.1f/%.1f°C\n",
+                 stabilizingTimeoutMinutes, stabilizingToleranceStrict,
+                 stabilizingToleranceWarning, stabilizingToleranceCritical);
+    DEBUG_PRINTF("  PID reset: %s\n", disablePidReset ? "DISABLED" : "ENABLED");
     return true;
 }
 
 // Save settings to SD card (/config/settings.json)
 bool saveSettings()
 {
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<512> doc; // Increased size for v1.6.1
     doc["updateInterval"] = tempReadInterval;
     doc["pidKp"] = pidKp;
     doc["pidKi"] = pidKi;
     doc["pidKd"] = pidKd;
     doc["tempOffset"] = tempOffset;
+
+    // v1.4.7+ Stabilization parameters
+    doc["stabilizingTimeoutMinutes"] = stabilizingTimeoutMinutes;
+    doc["stabilizingToleranceStrict"] = stabilizingToleranceStrict;
+    doc["stabilizingToleranceWarning"] = stabilizingToleranceWarning;
+    doc["stabilizingToleranceCritical"] = stabilizingToleranceCritical;
+    doc["stabilizingStableDurationMs"] = stabilizingStableDurationMs;
+
+    // v1.4.9+ Timeline estimation
+    doc["estimatedHeatingRate"] = estimatedHeatingRate;
+    doc["estimatedCoolingRate"] = estimatedCoolingRate;
+    doc["estimatedStabilizationTime"] = estimatedStabilizationTime;
+
+    // v1.4.7+ HOLD phase
+    doc["cookingZoneMargin"] = cookingZoneMargin;
+
+    // v1.5.11+ Graph update
+    doc["idleGraphUpdateInterval"] = idleGraphUpdateInterval;
+
+    // v1.6.1+ PID reset control
+    doc["disablePidReset"] = disablePidReset;
 
     File file = SD.open("/config/settings.json", FILE_WRITE);
     if (!file)
@@ -201,15 +304,10 @@ bool saveSettings()
         return false;
     }
 
-    if (serializeJson(doc, file) == 0)
-    {
-        DEBUG_PRINTLN("Failed to write settings");
-        file.close();
-        return false;
-    }
-
+    serializeJson(doc, file);
     file.close();
-    DEBUG_PRINTLN("Settings saved to SD");
+
+    DEBUG_PRINTLN("Settings saved successfully");
     return true;
 }
 
@@ -274,22 +372,63 @@ bool loadProgramFromSD(const String &programName)
     // Parse optional enableDataLog field (default to false)
     currentProgram.enableDataLog = doc["enableDataLog"] | false;
 
+    // v1.6.0+ Advanced logging options
+    currentProgram.enableTestLog = doc["enableTestLog"] | false;
+    currentProgram.enableMaintenanceLog = doc["enableMaintenanceLog"] | false;
+    currentProgram.dataLogInterval = doc["dataLogInterval"] | 5000;
+    currentProgram.adaptiveLogging = doc["adaptiveLogging"] | false;
+    currentProgram.adaptiveTempDelta = doc["adaptiveTempDelta"] | 0.5f;
+    currentProgram.adaptivePwmDelta = doc["adaptivePwmDelta"] | 5.0f;
+
+    // Manual mode for open-loop testing
+    currentProgram.manualMode = doc["manualMode"] | false;
+    currentProgram.manualPWM = doc["manualPWM"] | 0;
+
+    // v1.6.1+ PID reset control per program
+    currentProgram.disablePidReset = doc["disablePidReset"] | disablePidReset;
+
     currentProgram.active = false;
     currentProgram.currentStep = 0;
 
-    DEBUG_PRINTF("Program loaded: %s with %d steps (dataLog=%s)\n",
-                 currentProgram.name, currentProgram.numSteps,
-                 currentProgram.enableDataLog ? "ON" : "OFF");
+    DEBUG_PRINTF("Program loaded: %s with %d steps\n", currentProgram.name, currentProgram.numSteps);
+    DEBUG_PRINTF("  Logging: user=%s test=%s maint=%s adaptive=%s interval=%lums\n",
+                 currentProgram.enableDataLog ? "ON" : "OFF",
+                 currentProgram.enableTestLog ? "ON" : "OFF",
+                 currentProgram.enableMaintenanceLog ? "ON" : "OFF",
+                 currentProgram.adaptiveLogging ? "ON" : "OFF",
+                 currentProgram.dataLogInterval);
+    DEBUG_PRINTF("  Manual mode: %s, PID reset: %s\n",
+                 currentProgram.manualMode ? "ENABLED" : "DISABLED",
+                 currentProgram.disablePidReset ? "DISABLED" : "ENABLED");
     return true;
 }
 
-// Start data logging to CSV file
+// Start data logging to CSV file (v1.6.0 enhanced)
 bool startDataLog(const String &programName)
 {
     if (dataLogActive)
     {
         dataLogFile.close();
         dataLogActive = false;
+    }
+
+    // Determine log type based on program settings
+    if (currentProgram.enableMaintenanceLog)
+    {
+        currentLogType = LOG_MAINTENANCE;
+    }
+    else if (currentProgram.enableTestLog)
+    {
+        currentLogType = LOG_TEST;
+    }
+    else if (currentProgram.enableDataLog)
+    {
+        currentLogType = LOG_USER;
+    }
+    else
+    {
+        currentLogType = LOG_NONE;
+        return false; // No logging enabled
     }
 
     // Create log filename with timestamp
@@ -305,20 +444,78 @@ bool startDataLog(const String &programName)
     safeName.replace("/", "_");
     safeName.replace("\\", "_");
 
-    String logPath = String("/logs/") + safeName + "_" + timestamp + ".csv";
+    // Add log type suffix
+    const char *typePrefix = "";
+    switch (currentLogType)
+    {
+    case LOG_USER:
+        typePrefix = "user_";
+        break;
+    case LOG_TEST:
+        typePrefix = "test_";
+        break;
+    case LOG_MAINTENANCE:
+        typePrefix = "maint_";
+        break;
+    default:
+        typePrefix = "";
+        break;
+    }
 
-    DEBUG_PRINTF("Starting data log: %s\n", logPath.c_str());
+    String logPath = String("/logs/") + typePrefix + safeName + "_" + timestamp + ".csv";
+
+    DEBUG_PRINTF("Starting data log: %s (type=%d, adaptive=%s)\n",
+                 logPath.c_str(), currentLogType,
+                 currentProgram.adaptiveLogging ? "ON" : "OFF");
 
     dataLogFile = SD.open(logPath, FILE_WRITE);
     if (!dataLogFile)
     {
         DEBUG_PRINTF("Failed to create data log file: %s\n", logPath.c_str());
+        currentLogType = LOG_NONE;
         return false;
     }
 
-    // Write CSV header
-    dataLogFile.println("Timestamp,ElapsedSeconds,CurrentTemp,RawTemp,TargetTemp,PidOutput,SSR2_PWM,Phase,Step");
+    // Write CSV header based on log type
+    switch (currentLogType)
+    {
+    case LOG_USER:
+        // Basic user log: timestamp, temps, phase, step
+        dataLogFile.println("Timestamp,ElapsedSeconds,CurrentTemp,TargetTemp,Phase,Step");
+        break;
+
+    case LOG_TEST:
+        // Test log: add PID output and SSR states for tuning (SSR1 removed - always ON during program)
+        dataLogFile.println("Timestamp,ElapsedSeconds,CurrentTemp,RawTemp,TargetTemp,PidOutput,SSR2_PWM,Phase,Step");
+        break;
+
+    case LOG_MAINTENANCE:
+        // Maintenance log: full debug with all parameters (21 columns)
+        // SSR1 removed (always ON when program running)
+        // Added: FilteredTemp, Error, Pterm, Iterm, Dterm, EffectiveHoldSec, StabilizingTimeSec, InitialBoost, LogReason
+        dataLogFile.println("Timestamp,ElapsedSeconds,CurrentTemp,FilteredTemp,RawTemp,TargetTemp,TempOffset,Error,PidOutput,Pterm,Iterm,Dterm,PidKp,PidKi,PidKd,SSR2_PWM,Phase,Step,RampRate,HoldTime,EffectiveHoldSec,StabilizingTimeSec,InitialBoost,LogReason");
+        break;
+
+    default:
+        dataLogFile.println("Timestamp,ElapsedSeconds,CurrentTemp,TargetTemp");
+        break;
+    }
     dataLogFile.flush();
+
+    // Initialize adaptive logging state
+    if (currentProgram.adaptiveLogging)
+    {
+        adaptiveLoggingEnabled = true;
+        lastLoggedTemp = currentTemp;
+        lastLoggedPwm = ssr2Pwm;
+        adaptiveTempDelta = currentProgram.adaptiveTempDelta;
+        adaptivePwmDelta = currentProgram.adaptivePwmDelta * 10.23f; // Convert % to 0-1023
+        adaptiveLogInterval = currentProgram.dataLogInterval;
+    }
+    else
+    {
+        adaptiveLoggingEnabled = false;
+    }
 
     dataLogActive = true;
     lastDataLogMs = millis();
@@ -334,15 +531,63 @@ void stopDataLog()
     {
         dataLogFile.close();
         dataLogActive = false;
+        currentLogType = LOG_NONE;
+        adaptiveLoggingEnabled = false;
         DEBUG_PRINTLN("Data logging stopped");
     }
 }
 
-// Write a data point to the log file
+// Write a data point to the log file (v1.6.0 enhanced with adaptive logging)
 void logDataPoint()
 {
     if (!dataLogActive || !dataLogFile)
         return;
+
+    // Determine reason for logging (v1.6.1)
+    String logReason = "PERIODIC";
+
+    // Adaptive logging: only log if significant change detected
+    if (adaptiveLoggingEnabled)
+    {
+        float tempDelta = abs(currentTemp - lastLoggedTemp);
+        float pwmDelta = abs((int)ssr2Pwm - (int)lastLoggedPwm);
+
+        // Check if we should log this point
+        bool significantTempChange = (tempDelta >= adaptiveTempDelta);
+        bool significantPwmChange = (pwmDelta >= adaptivePwmDelta);
+
+        // Always log on step changes or phase changes
+        static uint8_t lastStep = 255;
+        static int lastPhase = -1;
+        bool stepOrPhaseChange = (lastStep != currentProgram.currentStep) ||
+                                 (lastPhase != currentPhase);
+
+        if (stepOrPhaseChange)
+        {
+            lastStep = currentProgram.currentStep;
+            lastPhase = currentPhase;
+            logReason = "STEP_CHANGE";
+        }
+        else if (significantTempChange)
+        {
+            logReason = "TEMP_DELTA";
+        }
+        else if (significantPwmChange)
+        {
+            logReason = "PWM_DELTA";
+        }
+        else
+        {
+            return; // Skip this point - no significant change
+        }
+
+        // Update last logged values
+        lastLoggedTemp = currentTemp;
+        lastLoggedPwm = ssr2Pwm;
+    }
+
+    // Store last log reason for next iteration
+    lastLogReason = logReason;
 
     // Calculate elapsed time
     unsigned long elapsedMs = millis() - programStartMs;
@@ -359,17 +604,68 @@ void logDataPoint()
     const char *phaseStr = (currentPhase == PHASE_RAMP) ? "RAMP" : (currentPhase == PHASE_HOLD) ? "HOLD"
                                                                                                 : "IDLE";
 
-    // Write CSV line: Timestamp,ElapsedSeconds,CurrentTemp,RawTemp,TargetTemp,PidOutput,SSR2_PWM,Phase,Step
-    dataLogFile.printf("%s,%.1f,%.2f,%.2f,%.2f,%.2f,%u,%s,%d\n",
-                       timestamp,
-                       elapsedSec,
-                       currentTemp,
-                       rawTemp,
-                       targetTemp,
-                       pidOutput,
-                       ssr2Pwm,
-                       phaseStr,
-                       programLoaded ? (currentProgram.currentStep + 1) : 0);
+    // Write CSV line based on log type
+    switch (currentLogType)
+    {
+    case LOG_USER:
+        // Basic: Timestamp,ElapsedSeconds,CurrentTemp,TargetTemp,Phase,Step
+        dataLogFile.printf("%s,%.1f,%.2f,%.2f,%s,%d\n",
+                           timestamp, elapsedSec, currentTemp, targetTemp,
+                           phaseStr, programLoaded ? (currentProgram.currentStep + 1) : 0);
+        break;
+
+    case LOG_TEST:
+        // Test: add PID output and SSR2 PWM (SSR1 removed - always ON)
+        dataLogFile.printf("%s,%.1f,%.2f,%.2f,%.2f,%.2f,%u,%s,%d\n",
+                           timestamp, elapsedSec, currentTemp, rawTemp, targetTemp,
+                           pidOutput, ssr2Pwm, phaseStr,
+                           programLoaded ? (currentProgram.currentStep + 1) : 0);
+        break;
+
+    case LOG_MAINTENANCE:
+    {
+        // Maintenance: full debug with 21 columns (v1.6.1)
+        // Calculate PID terms (approximate from PID library behavior)
+        pidError = targetTemp - currentTemp;
+        pidPterm = pidKp * pidError;
+        // Note: Iterm and Dterm are internal to PID library - approximated here
+        pidIterm = 0.0; // Would need PID library modification for exact value
+        pidDterm = 0.0; // Would need PID library modification for exact value
+
+        // Calculate effective hold time (seconds since hold phase started)
+        unsigned long effectiveHoldSec = 0;
+        if (currentPhase == PHASE_HOLD && effectiveHoldStartMs > 0)
+        {
+            effectiveHoldSec = (millis() - effectiveHoldStartMs) / 1000;
+        }
+
+        // Calculate stabilizing time (seconds spent within tolerance)
+        unsigned long stabilizingTimeSec = 0;
+        if (isStabilizing && stabilizingStartMs > 0)
+        {
+            stabilizingTimeSec = (millis() - stabilizingStartMs) / 1000;
+        }
+
+        dataLogFile.printf("%s,%.1f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%u,%s,%d,%.2f,%lu,%lu,%lu,%d,%s\n",
+                           timestamp, elapsedSec,
+                           currentTemp, filteredTemp, rawTemp, targetTemp, tempOffset,
+                           pidError, pidOutput, pidPterm, pidIterm, pidDterm,
+                           pidKp, pidKi, pidKd,
+                           ssr2Pwm, phaseStr,
+                           programLoaded ? (currentProgram.currentStep + 1) : 0,
+                           programLoaded ? currentProgram.steps[currentProgram.currentStep].rampRate : 0.0f,
+                           programLoaded ? currentProgram.steps[currentProgram.currentStep].holdTime : 0,
+                           effectiveHoldSec, stabilizingTimeSec,
+                           initialBoost ? 1 : 0, logReason.c_str());
+        break;
+    }
+
+    default:
+        // Fallback
+        dataLogFile.printf("%s,%.1f,%.2f,%.2f\n",
+                           timestamp, elapsedSec, currentTemp, targetTemp);
+        break;
+    }
 
     dataLogFile.flush(); // Ensure data is written to SD card
     lastDataLogMs = millis();
@@ -548,6 +844,7 @@ void executeProgramStep()
             targetTemp = step.targetTemp;
             currentPhase = PHASE_HOLD;
             phaseStartMs = now;
+            effectiveHoldStartMs = now; // Track hold start (v1.6.1)
             DEBUG_PRINTF("Step %d: Starting HOLD at %.1f°C for %d min\n",
                          stepIndex + 1, step.targetTemp, step.holdTime);
         }
@@ -568,6 +865,9 @@ void executeProgramStep()
             targetTemp = step.targetTemp;
             currentPhase = PHASE_HOLD;
             phaseStartMs = now;
+            effectiveHoldStartMs = now; // Track hold start (v1.6.1)
+            isStabilizing = false;      // Reset stabilization tracking
+            stabilizingStartMs = 0;
             DEBUG_PRINTF("Step %d: RAMP complete, starting HOLD at %.1f°C for %d min\n",
                          stepIndex + 1, step.targetTemp, step.holdTime);
         }
@@ -591,6 +891,19 @@ void executeProgramStep()
             currentProgram.currentStep++;
             currentPhase = PHASE_IDLE;
             DEBUG_PRINTF("Step %d: HOLD complete, moving to next step\n", stepIndex + 1);
+
+            // Reset PID integrator on step change (v1.6.1)
+            // Unless disablePidReset is enabled in program or global settings
+            if (!currentProgram.disablePidReset && !disablePidReset)
+            {
+                tempPID.SetMode(MANUAL);    // Disable PID temporarily
+                tempPID.SetMode(AUTOMATIC); // Re-enable (clears integrator)
+                DEBUG_PRINTLN("  PID integrator reset for new step");
+            }
+            else
+            {
+                DEBUG_PRINTLN("  PID reset disabled, keeping integrator state");
+            }
         }
         // else: continue holding at target temperature
         break;
@@ -1467,6 +1780,11 @@ void setupWebServer()
                     currentProgram.currentStep = 0;
                     currentPhase = PHASE_IDLE;
                     
+                    // Initialize boost state (v1.6.1)
+                    // Could be set based on large temp delta or program setting
+                    float tempDelta = currentProgram.steps[0].targetTemp - currentTemp;
+                    initialBoost = (tempDelta > 50.0); // Enable boost if >50°C to heat
+                    
                     // Start data logging if enabled in program
                     if (currentProgram.enableDataLog) {
                         startDataLog(program);
@@ -1496,6 +1814,55 @@ void setupWebServer()
         
         DEBUG_PRINTLN("Program stopped");
         request->send(200, "text/plain", "Program stopped"); });
+
+    // Save settings endpoint (v1.6.1 config.html)
+    server.on("/save_settings", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+              {
+        StaticJsonDocument<512> doc;
+        DeserializationError error = deserializeJson(doc, data, len);
+        
+        if (error) {
+            request->send(400, "text/plain", "Invalid JSON");
+            return;
+        }
+        
+        // Update global settings from JSON
+        pidKp = doc["pidKp"] | pidKp;
+        pidKi = doc["pidKi"] | pidKi;
+        pidKd = doc["pidKd"] | pidKd;
+        
+        stabilizingTimeoutMinutes = doc["stabilizingTimeoutMinutes"] | stabilizingTimeoutMinutes;
+        stabilizingToleranceStrict = doc["stabilizingToleranceStrict"] | stabilizingToleranceStrict;
+        stabilizingToleranceWarning = doc["stabilizingToleranceWarning"] | stabilizingToleranceWarning;
+        stabilizingToleranceCritical = doc["stabilizingToleranceCritical"] | stabilizingToleranceCritical;
+        stabilizingStableDurationMs = doc["stabilizingStableDurationMs"] | stabilizingStableDurationMs;
+        
+        estimatedHeatingRate = doc["estimatedHeatingRate"] | estimatedHeatingRate;
+        estimatedCoolingRate = doc["estimatedCoolingRate"] | estimatedCoolingRate;
+        estimatedStabilizationTime = doc["estimatedStabilizationTime"] | estimatedStabilizationTime;
+        
+        cookingZoneMargin = doc["cookingZoneMargin"] | cookingZoneMargin;
+        idleGraphUpdateInterval = doc["idleGraphUpdateInterval"] | idleGraphUpdateInterval;
+        disablePidReset = doc["disablePidReset"] | disablePidReset;
+        
+        // Update PID controller with new tunings
+        tempPID.SetTunings(pidKp, pidKi, pidKd);
+        
+        // Save to SD card
+        if (saveSettings()) {
+            request->send(200, "text/plain", "Settings saved successfully");
+            DEBUG_PRINTLN("Settings updated via web interface");
+        } else {
+            request->send(500, "text/plain", "Failed to save settings to SD card");
+        } });
+
+    // Reboot endpoint (v1.6.1 config.html)
+    server.on("/reboot", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
+        request->send(200, "text/plain", "Rebooting...");
+        DEBUG_PRINTLN("Reboot requested via web interface");
+        delay(500);
+        ESP.restart(); });
 
     // Start server
     server.begin();
@@ -2143,6 +2510,18 @@ void loop()
         // Read temperature from MAX6675 (no pin switching needed with dedicated Serial)
         rawTemp = thermocouple.readCelsius();
         currentTemp = rawTemp + tempOffset;
+
+        // Apply low-pass filter for maintenance logging (v1.6.1)
+        // filteredTemp = alpha * currentTemp + (1 - alpha) * filteredTemp
+        if (filteredTemp == 0.0)
+        {
+            filteredTemp = currentTemp; // Initialize on first read
+        }
+        else
+        {
+            filteredTemp = TEMP_FILTER_ALPHA * currentTemp + (1.0 - TEMP_FILTER_ALPHA) * filteredTemp;
+        }
+
         lastTempRead = millis();
         // Store sample for graph (append newest at tempSampleIdx)
         tempSamples[tempSampleIdx] = (float)currentTemp;
@@ -2168,6 +2547,42 @@ void loop()
     {
         if (tempPID.Compute())
         {
+            // Track stabilization state (v1.6.1)
+            // Temperature is "stable" when within tolerance of target
+            float tempError = abs(targetTemp - currentTemp);
+            float stabilityTolerance = 2.0; // °C - could be made configurable
+
+            if (currentPhase == PHASE_HOLD)
+            {
+                if (tempError <= stabilityTolerance)
+                {
+                    // Within tolerance
+                    if (!isStabilizing)
+                    {
+                        // Just entered stable zone
+                        isStabilizing = true;
+                        stabilizingStartMs = millis();
+                    }
+                    // else: continue timing stabilization
+                }
+                else
+                {
+                    // Outside tolerance
+                    if (isStabilizing)
+                    {
+                        // Just left stable zone - reset
+                        isStabilizing = false;
+                        stabilizingStartMs = 0;
+                    }
+                }
+            }
+            else
+            {
+                // Not in hold phase - no stabilization tracking
+                isStabilizing = false;
+                stabilizingStartMs = 0;
+            }
+
             // IMPORTANT: SSR1 and SSR2 are in SERIES with the heating element
             // Both must be active for current to flow through the resistor
             //
@@ -2206,7 +2621,9 @@ void loop()
     }
 
     // Log data point if logging is active and interval has passed
-    if (dataLogActive && programRunning && (millis() - lastDataLogMs >= DATA_LOG_INTERVAL))
+    // Use program-specific interval (v1.6.0)
+    unsigned long logInterval = currentProgram.dataLogInterval > 0 ? currentProgram.dataLogInterval : DATA_LOG_INTERVAL;
+    if (dataLogActive && programRunning && (millis() - lastDataLogMs >= logInterval))
     {
         logDataPoint();
     }

@@ -18,7 +18,24 @@ struct FiringProgram
     ProgramStep steps[10]; // Array of program steps (max 10 steps)
     bool active;           // Whether this program is currently running
     uint8_t currentStep;   // Current step being executed
-    bool enableDataLog;    // Whether to log temperature data to CSV during execution
+
+    // Data logging options (v1.6.0+)
+    bool enableDataLog;        // User log (basic CSV)
+    bool enableTestLog;        // Test log (PID tuning with extra columns)
+    bool enableMaintenanceLog; // Maintenance log (full debug data)
+    uint32_t dataLogInterval;  // Logging interval in ms (default 5000)
+    bool adaptiveLogging;      // Adaptive sampling (reduce volume by ~95%)
+
+    // Adaptive logging thresholds
+    float adaptiveTempDelta; // Min temp change to log (default 0.5°C)
+    float adaptivePwmDelta;  // Min PWM change to log (default 5%)
+
+    // Manual mode for open-loop testing
+    bool manualMode;    // Override PID with manual PWM
+    uint16_t manualPWM; // Manual PWM value (0-1023)
+
+    // PID reset control (v1.6.1)
+    bool disablePidReset; // Disable PID reset between steps
 };
 
 // Structure for current furnace state

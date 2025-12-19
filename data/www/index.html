@@ -87,6 +87,19 @@
             padding: 20px;
             opacity: 0.8;
         }
+        .build-footer {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            padding: 4px 12px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 10px;
+            font-family: monospace;
+            border-top-left-radius: 6px;
+            z-index: 9999;
+            pointer-events: none;
+        }
         
         @media (max-width: 600px) {
             .header h1 {
@@ -128,10 +141,10 @@
                 <p>Accéder aux fichiers stockés sur la carte SD : programmes, logs, mises à jour firmware.</p>
             </a>
 
-            <a href="/wifi" class="nav-card">
-                <div class="nav-card-icon icon-wifi">📶</div>
-                <h3>Configuration Wi-Fi</h3>
-                <p>Configurer la connexion réseau sans fil et les paramètres de communication.</p>
+            <a href="/config.html" class="nav-card">
+                <div class="nav-card-icon icon-wifi">⚙️</div>
+                <h3>Configuration</h3>
+                <p>Configurer le WiFi et les paramètres PID par défaut du système.</p>
             </a>
         </div>
 
@@ -159,5 +172,6 @@
                 document.getElementById('deviceIP').textContent = 'Connecté à ' + location.host;
             });
     </script>
+    <div class="build-footer">Build: v1.6.1 - 2025-12-17 14:30</div>
 </body>
 </html>

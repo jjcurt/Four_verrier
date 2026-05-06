@@ -1,0 +1,61 @@
+{
+  "name": "Bouteilles_1_NoReset",
+  "enableMaintenanceLog": true,
+  "adaptiveLogging": true,
+  "adaptiveTempDelta": 1,
+  "adaptiveDerivDelta": 2,
+  "adaptivePwmDelta": 100,
+  "adaptiveMinInterval": 5000,
+  "disablePidReset": true,
+  "numSteps": 8,
+  "steps": [
+    {
+      "targetTemp": 260,
+      "rampRate": 4.3,
+      "withRamp": true,
+      "holdTime": 12
+    },
+    {
+      "targetTemp": 400,
+      "rampRate": 4.3,
+      "withRamp": true,
+      "holdTime": 12
+    },
+    {
+      "targetTemp": 600,
+      "rampRate": 5.25,
+      "withRamp": true,
+      "holdTime": 10
+    },
+    {
+      "targetTemp": 705,
+      "rampRate": 1.6,
+      "withRamp": true,
+      "holdTime": 20
+    },
+    {
+      "targetTemp": 802,
+      "rampRate": 2.1,
+      "withRamp": true,
+      "holdTime": 10
+    },
+    {
+      "targetTemp": 600,
+      "rampRate": 100,
+      "withRamp": false,
+      "holdTime": 60
+    },
+    {
+      "targetTemp": 520,
+      "rampRate": 4.3,
+      "withRamp": true,
+      "holdTime": 30
+    },
+    {
+      "targetTemp": 400,
+      "rampRate": 0.85,
+      "withRamp": true,
+      "holdTime": 20
+    }
+  ]
+}

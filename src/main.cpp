@@ -18,7 +18,7 @@
 
 // Firmware version
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "1.6.1"
+#define FIRMWARE_VERSION "1.6.1r5"
 #endif
 const char *firmwareVersion = FIRMWARE_VERSION;
 
@@ -55,8 +55,7 @@ const char *firmwareVersion = FIRMWARE_VERSION;
 // RelaySerial public header and shared pin macros
 // Raw thermocouple reading before applying offset
 double rawTemp = 0.0;
-// User calibration offset added to rawTemp (Celsius)
-double tempOffset = 0.0;
+
 #include <relay_serial.h>
 #include <relay_pins.h>
 
@@ -158,12 +157,12 @@ unsigned long adaptiveLogInterval = 5000; // ms
 String lastLogReason = "INIT";            // Reason for last log entry
 
 // Temperature filtering and PID tracking (v1.6.1 maintenance logs)
-float filteredTemp = 0.0;            // Low-pass filtered temperature
-const float TEMP_FILTER_ALPHA = 0.3; // Filter coefficient (0-1, lower = more smoothing)
-float pidError = 0.0;                // PID error (target - current)
-float pidPterm = 0.0;                // Proportional term
-float pidIterm = 0.0;                // Integral term
-float pidDterm = 0.0;                // Derivative term
+float filteredTemp = 0.0;    // Low-pass filtered temperature
+float tempFilterAlpha = 0.8; // Coefficient EMA, configurable via settings.json
+float pidError = 0.0;        // PID error (target - current)
+float pidPterm = 0.0;        // Proportional term
+float pidIterm = 0.0;        // Integral term
+float pidDterm = 0.0;        // Derivative term
 
 // Stabilization tracking (v1.6.1)
 unsigned long effectiveHoldStartMs = 0; // When hold phase actually started
@@ -231,7 +230,7 @@ bool loadSettings()
     pidKp = doc["pidKp"] | pidKp;
     pidKi = doc["pidKi"] | pidKi;
     pidKd = doc["pidKd"] | pidKd;
-    tempOffset = doc["tempOffset"] | tempOffset; // default 0 if absent
+    tempFilterAlpha = doc["tempFilterAlpha"] | tempFilterAlpha;
 
     // v1.4.7+ Stabilization parameters
     stabilizingTimeoutMinutes = doc["stabilizingTimeoutMinutes"] | stabilizingTimeoutMinutes;
@@ -257,8 +256,8 @@ bool loadSettings()
     // Update PID controller with loaded tunings
     tempPID.SetTunings(pidKp, pidKi, pidKd);
 
-    DEBUG_PRINTF("Settings loaded: interval=%lu, Kp=%.2f, Ki=%.3f, Kd=%.2f, offset=%.2f\n",
-                 tempReadInterval, pidKp, pidKi, pidKd, tempOffset);
+    DEBUG_PRINTF("Settings loaded: interval=%lu, Kp=%.2f, Ki=%.3f, Kd=%.2f\n",
+                 tempReadInterval, pidKp, pidKi, pidKd);
     DEBUG_PRINTF("  Stabilization: timeout=%.1fmin, tolerances=%.1f/%.1f/%.1f°C\n",
                  stabilizingTimeoutMinutes, stabilizingToleranceStrict,
                  stabilizingToleranceWarning, stabilizingToleranceCritical);
@@ -274,7 +273,6 @@ bool saveSettings()
     doc["pidKp"] = pidKp;
     doc["pidKi"] = pidKi;
     doc["pidKd"] = pidKd;
-    doc["tempOffset"] = tempOffset;
 
     // v1.4.7+ Stabilization parameters
     doc["stabilizingTimeoutMinutes"] = stabilizingTimeoutMinutes;
@@ -296,6 +294,9 @@ bool saveSettings()
 
     // v1.6.1+ PID reset control
     doc["disablePidReset"] = disablePidReset;
+
+    // v1.6.1r+ EMA filter coefficient
+    doc["tempFilterAlpha"] = tempFilterAlpha;
 
     File file = SD.open("/config/settings.json", FILE_WRITE);
     if (!file)
@@ -493,7 +494,7 @@ bool startDataLog(const String &programName)
         // Maintenance log: full debug with all parameters (21 columns)
         // SSR1 removed (always ON when program running)
         // Added: FilteredTemp, Error, Pterm, Iterm, Dterm, EffectiveHoldSec, StabilizingTimeSec, InitialBoost, LogReason
-        dataLogFile.println("Timestamp,ElapsedSeconds,CurrentTemp,FilteredTemp,RawTemp,TargetTemp,TempOffset,Error,PidOutput,Pterm,Iterm,Dterm,PidKp,PidKi,PidKd,SSR2_PWM,Phase,Step,RampRate,HoldTime,EffectiveHoldSec,StabilizingTimeSec,InitialBoost,LogReason");
+        dataLogFile.println("Timestamp,ElapsedSeconds,CurrentTemp,FilteredTemp,RawTemp,TargetTemp,Error,PidOutput,Pterm,Iterm,Dterm,PidKp,PidKi,PidKd,SSR2_PWM,Phase,Step,RampRate,HoldTime,EffectiveHoldSec,StabilizingTimeSec,InitialBoost,LogReason");
         break;
 
     default:
@@ -648,7 +649,7 @@ void logDataPoint()
 
         dataLogFile.printf("%s,%.1f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%u,%s,%d,%.2f,%lu,%lu,%lu,%d,%s\n",
                            timestamp, elapsedSec,
-                           currentTemp, filteredTemp, rawTemp, targetTemp, tempOffset,
+                           currentTemp, filteredTemp, rawTemp, targetTemp,
                            pidError, pidOutput, pidPterm, pidIterm, pidDterm,
                            pidKp, pidKi, pidKd,
                            ssr2Pwm, phaseStr,
@@ -683,12 +684,10 @@ void displayStartupScreen()
 {
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-
-    // Title with version
     tft.setTextSize(1);
     tft.drawString("Four Verrier", 10, 10, 4);
-    tft.setTextColor(TFT_CYAN, TFT_BLACK);
-    String versionText = "Version " + String(FIRMWARE_VERSION);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    String versionText = "Firmware: " + String(FIRMWARE_VERSION);
     tft.drawString(versionText, 10, 45, 2);
 
     // Separator line
@@ -797,6 +796,87 @@ void displayStartupScreen()
     delay(10000);
 }
 
+// Affiche la timeline du programme de cuisson sous forme de blocs sur le TFT (en bas de l'écran)
+void drawProgramTimeline()
+{
+    if (!programLoaded || currentProgram.numSteps == 0)
+        return;
+    // Zone d'affichage (adapter selon la résolution)
+    const int x0 = 10, y0 = 230, w = 300, h = 32;
+    const int stepGap = 4;
+    int totalDuration = 0;
+    for (int i = 0; i < currentProgram.numSteps; ++i)
+    {
+        totalDuration += currentProgram.steps[i].holdTime;
+    }
+    if (totalDuration == 0)
+        return;
+
+    // Efface la zone
+    tft.fillRect(x0, y0, w, h, TFT_BLACK);
+
+    int x = x0;
+    unsigned long now = millis();
+    for (int i = 0; i < currentProgram.numSteps; ++i)
+    {
+        int stepW = (int)((float)currentProgram.steps[i].holdTime / totalDuration * (w - (currentProgram.numSteps - 1) * stepGap));
+        uint16_t color = TFT_DARKGREY;
+        if (i == currentProgram.currentStep)
+            color = TFT_ORANGE;
+        else if (currentProgram.steps[i].withRamp)
+            color = TFT_CYAN;
+        else
+            color = TFT_GREEN;
+        // Bloc principal
+        tft.fillRect(x, y0, stepW, h, color);
+        tft.drawRect(x, y0, stepW, h, TFT_WHITE);
+
+        // Remplissage progressif pour l'étape courante
+        if (i == currentProgram.currentStep && programRunning)
+        {
+            float progress = 0.0f;
+            // Calcul du pourcentage d'avancement selon le type de phase
+            if (currentPhase == PHASE_RAMP && currentProgram.steps[i].withRamp)
+            {
+                // RAMP: progression basée sur la température
+                float t0 = rampStartTemp;
+                float t1 = currentProgram.steps[i].targetTemp;
+                float t = currentTemp;
+                if (t1 != t0)
+                    progress = (t - t0) / (t1 - t0);
+            }
+            else if (currentPhase == PHASE_HOLD || (!currentProgram.steps[i].withRamp))
+            {
+                // HOLD: progression basée sur le temps
+                unsigned long elapsed = now - phaseStartMs;
+                unsigned long duration = currentProgram.steps[i].holdTime * 60000UL;
+                if (duration > 0)
+                    progress = (float)elapsed / (float)duration;
+            }
+            if (progress < 0.0f)
+                progress = 0.0f;
+            if (progress > 1.0f)
+                progress = 1.0f;
+            int fillW = (int)(progress * stepW);
+            if (fillW > 0)
+            {
+                tft.fillRect(x, y0, fillW, h, TFT_YELLOW);
+            }
+        }
+
+        // Texte: température cible
+        tft.setTextColor(TFT_BLACK, color);
+        tft.setTextSize(2);
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d°C", (int)currentProgram.steps[i].targetTemp);
+        tft.drawCentreString(buf, x + stepW / 2, y0 + 4, 2);
+        // Texte: durée
+        snprintf(buf, sizeof(buf), "%dmin", (int)currentProgram.steps[i].holdTime);
+        tft.setTextSize(1);
+        tft.drawCentreString(buf, x + stepW / 2, y0 + h - 14, 1);
+        x += stepW + stepGap;
+    }
+}
 // Execute the current program step by step
 void executeProgramStep()
 {
@@ -938,239 +1018,280 @@ void drawStaticUI()
 }
 
 void updateDisplay(bool force)
+    // --- Affichage dynamique en haut de l'écran ---
+    // Température four
+    int tempColor = TFT_WHITE;
+if (currentTemp < targetTemp - 2.0)
+    tempColor = TFT_CYAN;
+else if (currentTemp > targetTemp + 2.0)
+    tempColor = TFT_ORANGE;
+else
+    tempColor = TFT_GREEN;
+tft.fillRect(5, 5, 150, 32, TFT_BLACK);
+tft.setTextColor(tempColor, TFT_BLACK);
+tft.setTextSize(4);
+char buf[16];
+snprintf(buf, sizeof(buf), "%5.1f", currentTemp);
+tft.drawString(buf, 5, 5, 4);
+tft.setTextColor(TFT_WHITE, TFT_BLACK);
+tft.setTextSize(2);
+tft.drawString("C", 120, 10, 2);
+// Température cible
+tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+snprintf(buf, sizeof(buf), "Cible: %5.1f", targetTemp);
+tft.drawString(buf, 5, 40, 2);
+
+// État SSR1 (carré gris ou rouge)
+tft.setTextColor(TFT_WHITE, TFT_BLACK);
+tft.drawString("SSR1", 170, 10, 2);
+tft.fillRect(210, 10, 20, 20, lastSsr1State ? TFT_RED : TFT_DARKGREY);
+tft.drawRect(210, 10, 20, 20, TFT_WHITE);
+
+// État SSR2 (slider horizontal)
+tft.drawString("SSR2", 170, 40, 2);
+tft.drawRect(210, 40, 80, 14, TFT_WHITE);
+int pwmW = (int)(ssr2Pwm / 1023.0 * 78.0);
+tft.fillRect(211, 41, pwmW, 12, TFT_ORANGE);
+
+// Nom du programme
+tft.setTextColor(TFT_WHITE, TFT_BLACK);
+tft.fillRect(5, 70, 150, 20, TFT_BLACK);
+snprintf(buf, sizeof(buf), "%s", (programLoaded ? currentProgram.name : "-"));
+tft.drawString(buf, 5, 70, 2);
+
+// Étape courante / total
+tft.fillRect(160, 70, 60, 20, TFT_BLACK);
+if (programLoaded)
+    snprintf(buf, sizeof(buf), "Etape: %d/%d", currentProgram.currentStep + 1, currentProgram.numSteps);
+else
+    snprintf(buf, sizeof(buf), "Etape: -");
+tft.drawString(buf, 160, 70, 2);
+
+// Temps écoulé (depuis début programme)
+tft.fillRect(230, 70, 90, 20, TFT_BLACK);
+if (programRunning)
+{
+    unsigned long elapsed = (millis() - programStartMs) / 1000;
+    int min = elapsed / 60;
+    int sec = elapsed % 60;
+    snprintf(buf, sizeof(buf), "%02d:%02d", min, sec);
+    tft.drawString(buf, 230, 70, 2);
+}
+else
+{
+    tft.drawString("--:--", 230, 70, 2);
+}
+
+// État (IDLE, RAMP, STAB, HOLD)
+tft.fillRect(330, 70, 80, 20, TFT_BLACK);
+const char *stateStr = "IDLE";
+if (programRunning && programLoaded)
+{
+    if (currentPhase == PHASE_RAMP)
+        stateStr = "RAMP";
+    else if (currentPhase == PHASE_HOLD)
+        stateStr = "HOLD";
+    else if (isStabilizing)
+        stateStr = "STAB";
+}
+tft.setTextColor(TFT_WHITE, TFT_BLACK);
+tft.drawString(stateStr, 330, 70, 2);
 {
     static unsigned long lastUpdate = 0;
     if (!force && millis() - lastUpdate < 1000)
         return; // Update once per second
 
-    uint16_t tcol;
-    if (currentTemp < targetTemp - 2.0)
+    // --- Affichage dynamique : graphe en mode IDLE, timeline en mode programme ---
+    if (!programRunning || !programLoaded)
     {
-        tcol = TFT_CYAN; // Heating
-    }
-    else if (currentTemp > targetTemp + 2.0)
-    {
-        tcol = TFT_ORANGE; // Cooling
-    }
-    else
-    {
-        tcol = TFT_GREEN; // Stable
-    }
-
-    tft.setTextColor(tcol, TFT_BLACK);
-    tft.setTextSize(1);
-
-    // Update variable fields only (right-aligned with explicit background)
-    // Temperature values (right-aligned in a fixed-width field)
-    String tempStr = String(currentTemp, 1);
-    tft.fillRect(90, 5, 65, 20, TFT_BLACK); // Clear old value
-    tft.drawString(tempStr, 90, 5, 4);
-
-    tft.setTextColor(TFT_DARKCYAN, TFT_BLACK);
-    String targetStr = String(targetTemp, 1);
-    tft.fillRect(90, 35, 65, 20, TFT_BLACK); // Clear old value
-    tft.drawString(targetStr, 90, 35, 4);
-
-    // SSR1 indicator (filled rect changes color)
-    tft.fillRect(180, 5, 25, 25, programRunning ? TFT_RED : TFT_DARKGREY);
-
-    // SSR2 PWM bar (redraw interior only)
-    int barMaxW = 80;
-    int barW = map(ssr2Pwm, 0, 1023, 0, barMaxW);
-    tft.fillRect(181, 39, barMaxW, 12, TFT_BLACK); // Clear old bar
-    tft.fillRect(181, 39, barW, 12, TFT_ORANGE);   // Draw new bar
-
-    // Program name (clear and redraw, strip .json extension if present)
-    String displayName = currentProgramName;
-    if (displayName.endsWith(".json"))
-    {
-        displayName = displayName.substring(0, displayName.length() - 5);
-    }
-    tft.fillRect(50, 70, 100, 16, TFT_BLACK);
-    tft.drawString(displayName, 50, 70, 2);
-
-    // Step number (clear and redraw) - use currentProgram.currentStep + 1 for 1-indexed display
-    String stepText = programLoaded ? String(currentProgram.currentStep + 1) : String(0);
-    tft.fillRect(195, 70, 30, 16, TFT_BLACK);
-    tft.drawString(stepText, 195, 70, 2);
-
-    // Elapsed time formatted as h:m:s (clear wider area for formatted time)
-    unsigned long elapsed = programRunning ? (millis() - programStartMs) / 1000 : 0;
-    unsigned long hours = elapsed / 3600;
-    unsigned long minutes = (elapsed % 3600) / 60;
-    unsigned long seconds = elapsed % 60;
-    String elapsedText = String(hours) + ":" +
-                         (minutes < 10 ? "0" : "") + String(minutes) + ":" +
-                         (seconds < 10 ? "0" : "") + String(seconds);
-    tft.fillRect(265, 70, 55, 16, TFT_BLACK); // Wider clear area for h:m:s format
-    tft.drawString(elapsedText, 265, 70, 2);
-
-    // Draw temperature evolution graph with axes and scales
-    int screenW = tft.width();
-    const int leftMargin = 40;   // space for Y labels
-    const int rightMargin = 5;   // small right margin
-    const int bottomMargin = 10; // space for X labels below graph
-    const int topGraphY = 100;   // Start below program info
-    int gx = leftMargin;
-    int gy = topGraphY;
-    int gw = screenW - leftMargin - rightMargin; // graph drawable width
-    int gh = 125;                                // reduced height to leave space for X labels
-
-    // Clear graph background
-    tft.fillRect(gx, gy, gw, gh, TFT_DARKGREY);
-    // Compute min/max from buffer (with fallback)
-    float minT = 9999.0, maxT = -9999.0;
-    int count = tempSamplesFilled ? GRAPH_W : tempSampleIdx;
-    if (count <= 1)
-    {
-        minT = currentTemp - 5;
-        maxT = currentTemp + 5;
-    }
-    else
-    {
-        for (int i = 0; i < count; ++i)
+        // Afficher le graphe de température (mode IDLE)
+        int screenW = tft.width();
+        const int leftMargin = 40;
+        const int rightMargin = 5;
+        const int topGraphY = 100;
+        int gx = leftMargin;
+        int gy = topGraphY;
+        int gw = screenW - leftMargin - rightMargin;
+        int gh = 125;
+        tft.fillRect(0, gy, leftMargin, gh, TFT_BLACK);
+        tft.fillRect(gx, gy, gw, gh, TFT_DARKGREY);
+        float minT = 9999.0, maxT = -9999.0;
+        int count = tempSamplesFilled ? GRAPH_W : tempSampleIdx;
+        if (count <= 1)
         {
-            int idx = tempSamplesFilled ? ((tempSampleIdx + i) % GRAPH_W) : i;
-            float v = tempSamples[idx];
-            if (v < minT)
-                minT = v;
-            if (v > maxT)
-                maxT = v;
+            minT = currentTemp - 5;
+            maxT = currentTemp + 5;
         }
-        // add small padding
-        float pad = (maxT - minT) * 0.1;
-        if (pad < 0.5)
-            pad = 0.5;
-        minT -= pad;
-        maxT += pad;
-    }
-    if (minT >= maxT)
-    {
-        maxT = minT + 1.0;
-    }
-
-    // Draw axes
-    tft.drawFastVLine(gx, gy, gh, TFT_WHITE);      // Y axis
-    tft.drawFastHLine(gx, gy + gh, gw, TFT_WHITE); // X axis
-
-    // Draw horizontal grid lines and Y-axis labels (min..max)
-    for (int g = 0; g <= 4; ++g)
-    {
-        int yy = gy + g * (gh / 4);
-        tft.drawFastHLine(gx, yy, gw, TFT_BLACK);
-        // Value at this grid line
-        float val = maxT - (maxT - minT) * (float)g / 4.0f;
-        String label = String(val, (maxT - minT) < 20 ? 1 : 0);
-        // Draw label in left margin
+        else
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                int idx = tempSamplesFilled ? ((tempSampleIdx + i) % GRAPH_W) : i;
+                float v = tempSamples[idx];
+                if (v < minT)
+                    minT = v;
+                if (v > maxT)
+                    maxT = v;
+            }
+            float pad = (maxT - minT) * 0.1;
+            if (pad < 0.5)
+                pad = 0.5;
+            minT -= pad;
+            maxT += pad;
+        }
+        if (minT >= maxT)
+            maxT = minT + 1.0;
+        tft.drawFastVLine(gx, gy, gh, TFT_WHITE);
+        tft.drawFastHLine(gx, gy + gh, gw, TFT_WHITE);
+        for (int g = 0; g <= 4; ++g)
+        {
+            int yy = gy + g * (gh / 4);
+            tft.drawFastHLine(gx, yy, gw, TFT_BLACK);
+            float val = maxT - (maxT - minT) * (float)g / 4.0f;
+            String label = String(val, (maxT - minT) < 20 ? 1 : 0);
+            tft.setTextColor(TFT_WHITE, TFT_BLACK);
+            tft.drawString(label, 2, yy - 6, 1);
+        }
+        int plotCount = (count > gw) ? gw : count;
+        if (plotCount > 1)
+        {
+            int startIdx = tempSamplesFilled ? ((count > gw) ? ((tempSampleIdx - gw + GRAPH_W) % GRAPH_W) : 0) : 0;
+            int prevX = gx;
+            int firstIdx = startIdx;
+            float firstSample = tempSamples[firstIdx];
+            int prevY = gy + gh - (int)((firstSample - minT) / (maxT - minT) * (gh - 1));
+            for (int i = 1; i < plotCount; ++i)
+            {
+                int idx = tempSamplesFilled ? ((startIdx + i) % GRAPH_W) : i;
+                int px = gx + i;
+                float s = tempSamples[idx];
+                int y = gy + gh - (int)((s - minT) / (maxT - minT) * (gh - 1));
+                tft.drawLine(prevX, prevY, px, y, TFT_GREEN);
+                prevX = px;
+                prevY = y;
+            }
+        }
+        // (optionnel : labels X)
         tft.setTextColor(TFT_WHITE, TFT_BLACK);
-        tft.drawString(label, 2, yy - 6, 1);
+        lastUpdate = millis();
+        return;
     }
-
-    // Draw samples LEFT-TO-RIGHT: oldest at left edge, newest fills from left
-    // Each sample gets one pixel, scrolling left when buffer is full
-    int plotCount = (count > gw) ? gw : count;
-    if (plotCount > 1)
+    // Afficher la timeline (vue en blocs) pendant l’exécution d’un programme
+    int screenW = tft.width();
+    int gx = 0;
+    int gy = 100;
+    int gw = screenW;
+    int gh = 140;
+    tft.fillRect(gx, gy, gw, gh, TFT_BLACK);
+    // Timeline fidèle à la version web
+    if (programLoaded && currentProgram.numSteps > 0)
     {
-        int startIdx;
-        if (tempSamplesFilled)
+        const int x0 = gx + 10, y0 = gy + 10, w = gw - 20, h = gh - 20;
+        const int stepGap = 6;
+        int totalDuration = 0;
+        for (int i = 0; i < currentProgram.numSteps; ++i)
         {
-            // Buffer is full, show the most recent gw samples
-            // Newest sample is at (tempSampleIdx - 1), oldest is at (tempSampleIdx)
-            startIdx = (count > gw) ? ((tempSampleIdx - gw + GRAPH_W) % GRAPH_W) : 0;
+            totalDuration += currentProgram.steps[i].holdTime;
         }
-        else
+        if (totalDuration > 0)
         {
-            // Buffer not full yet, show from index 0
-            startIdx = 0;
-        }
-
-        // Draw polyline from left to right
-        int prevX = gx;
-        int firstIdx = startIdx;
-        float firstSample = tempSamples[firstIdx];
-        int prevY = gy + gh - (int)((firstSample - minT) / (maxT - minT) * (gh - 1));
-
-        for (int i = 1; i < plotCount; ++i)
-        {
-            int idx = tempSamplesFilled ? ((startIdx + i) % GRAPH_W) : i;
-            int px = gx + i; // one pixel per sample, left to right
-            float s = tempSamples[idx];
-            int y = gy + gh - (int)((s - minT) / (maxT - minT) * (gh - 1));
-            tft.drawLine(prevX, prevY, px, y, TFT_GREEN);
-            prevX = px;
-            prevY = y;
+            int x = x0;
+            unsigned long now = millis();
+            // --- Nouvelle timeline fidèle à la version web ---
+            // Calcul minT/maxT pour axe Y
+            float minT = 9999.0, maxT = -9999.0;
+            for (int i = 0; i < currentProgram.numSteps; ++i)
+            {
+                float t0 = (i == 0) ? currentTemp : currentProgram.steps[i - 1].targetTemp;
+                float t1 = currentProgram.steps[i].targetTemp;
+                if (t0 < minT)
+                    minT = t0;
+                if (t1 < minT)
+                    minT = t1;
+                if (t0 > maxT)
+                    maxT = t0;
+                if (t1 > maxT)
+                    maxT = t1;
+            }
+            float pad = (maxT - minT) * 0.1f;
+            if (pad < 2)
+                pad = 2;
+            minT -= pad;
+            maxT += pad;
+            if (minT >= maxT)
+                maxT = minT + 1.0f;
+            int blockW = (w - (currentProgram.numSteps - 1) * stepGap) / currentProgram.numSteps;
+            int xBloc = x0;
+            for (int i = 0; i < currentProgram.numSteps; ++i)
+            {
+                float t0 = (i == 0) ? currentTemp : currentProgram.steps[i - 1].targetTemp;
+                float t1 = currentProgram.steps[i].targetTemp;
+                int y0Bloc = y0 + h - (int)((t0 - minT) / (maxT - minT) * (h - 1));
+                int y1Bloc = y0 + h - (int)((t1 - minT) / (maxT - minT) * (h - 1));
+                if (currentProgram.steps[i].withRamp && currentProgram.steps[i].rampRate > 0)
+                {
+                    // Rampe orange inclinée
+                    int yMin = (y1Bloc < y0Bloc) ? y1Bloc : y0Bloc;
+                    int yMax = (y1Bloc > y0Bloc) ? y1Bloc : y0Bloc;
+                    tft.fillRect(xBloc, yMin, blockW, abs(y1Bloc - y0Bloc), TFT_ORANGE);
+                    tft.drawRect(xBloc, yMin, blockW, abs(y1Bloc - y0Bloc), TFT_WHITE);
+                    // Remplissage progression rampe
+                    if (i == currentProgram.currentStep && programRunning && currentPhase == PHASE_RAMP)
+                    {
+                        float progress = 0.0f;
+                        float t = currentTemp;
+                        if (t1 != t0)
+                            progress = (t - t0) / (t1 - t0);
+                        if (progress < 0.0f)
+                            progress = 0.0f;
+                        if (progress > 1.0f)
+                            progress = 1.0f;
+                        int fillH = (int)(abs(y1Bloc - y0Bloc) * progress);
+                        if (fillH > 0)
+                        {
+                            if (y1Bloc < y0Bloc) // montée
+                                tft.fillRect(xBloc, y0Bloc - fillH, blockW, fillH, TFT_YELLOW);
+                            else // descente
+                                tft.fillRect(xBloc, y0Bloc, blockW, fillH, TFT_YELLOW);
+                        }
+                    }
+                }
+                else
+                {
+                    // Palier vert horizontal
+                    int yPalier = y1Bloc;
+                    tft.fillRect(xBloc, yPalier, blockW, 8, TFT_GREEN);
+                    tft.drawRect(xBloc, yPalier, blockW, 8, TFT_WHITE);
+                    // Remplissage progression palier
+                    if (i == currentProgram.currentStep && programRunning && currentPhase == PHASE_HOLD)
+                    {
+                        unsigned long elapsed = now - phaseStartMs;
+                        unsigned long duration = currentProgram.steps[i].holdTime * 60000UL;
+                        float progress = (duration > 0) ? (float)elapsed / (float)duration : 0.0f;
+                        if (progress < 0.0f)
+                            progress = 0.0f;
+                        if (progress > 1.0f)
+                            progress = 1.0f;
+                        int fillW = (int)(blockW * progress);
+                        if (fillW > 0)
+                            tft.fillRect(xBloc, yPalier, fillW, 8, TFT_BLUE);
+                    }
+                }
+                // Texte température cible
+                tft.setTextColor(TFT_BLACK, TFT_GREEN);
+                tft.setTextSize(1);
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%dC", (int)t1);
+                tft.drawCentreString(buf, xBloc + blockW / 2, y1Bloc - 18, 2);
+                // Texte durée
+                snprintf(buf, sizeof(buf), "%dmin", (int)currentProgram.steps[i].holdTime);
+                tft.setTextSize(1);
+                tft.drawCentreString(buf, xBloc + blockW / 2, y1Bloc + 10, 1);
+                xBloc += blockW + stepGap;
+            }
         }
     }
-
-    // X-axis time labels BELOW the graph
-    // Calculate total elapsed time (in seconds) represented by collected samples
-    unsigned long totalSeconds = (unsigned long)count * (unsigned long)tempReadInterval / 1000UL;
-    float secPerSample = (float)tempReadInterval / 1000.0f;
-
-    // Visible time window based on graph width (gw pixels -> gw samples max)
-    unsigned long windowSeconds = (unsigned long)((float)gw * secPerSample + 0.5f);
-    unsigned long visibleSpanSeconds = (totalSeconds < windowSeconds) ? totalSeconds : windowSeconds;
-    unsigned long startSec = (totalSeconds > visibleSpanSeconds) ? (totalSeconds - visibleSpanSeconds) : 0UL;
-
-    // Determine tick interval based on currently visible span
-    unsigned tickSec;
-    if (visibleSpanSeconds <= 60)
-        tickSec = 10; // 10s intervals for first minute
-    else if (visibleSpanSeconds <= 600)
-        tickSec = 60; // 1min intervals up to 10 minutes
-    else if (visibleSpanSeconds <= 3600)
-        tickSec = 300; // 5min intervals up to 1 hour
-    else
-        tickSec = 600; // 10min intervals beyond 1 hour
-
-    // Clear label area below the graph to remove remnants
-    int labelY = gy + gh + 2;
-    tft.fillRect(gx, labelY, gw, 12, TFT_BLACK); // Clear old labels
-
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-
-    // Align the first tick to a multiple of tickSec for stable movement
-    unsigned long firstTick = (startSec / tickSec) * tickSec;
-    if (firstTick < startSec)
-        firstTick += tickSec;
-
-    for (unsigned long t = firstTick; t <= totalSeconds; t += tickSec)
-    {
-        // Calculate pixel position for this time within the visible window
-        int px = gx + (int)(((float)(t - startSec)) / secPerSample);
-        if (px > gx + gw)
-            break;
-
-        // Draw small tick mark
-        tft.drawFastVLine(px, gy + gh, 3, TFT_WHITE);
-
-        // Format time label (absolute elapsed time)
-        String lbl;
-        if (visibleSpanSeconds >= 3600)
-        {
-            // Use hours:minutes format (HH:MM)
-            unsigned h = t / 3600;
-            unsigned m = (t % 3600) / 60;
-            lbl = String(h) + "h" + (m < 10 ? "0" : "") + String(m);
-        }
-        else if (t >= 60)
-        {
-            // Use minutes:seconds format (MM:SS)
-            unsigned m = t / 60;
-            unsigned s = t % 60;
-            lbl = String(m) + ":" + (s < 10 ? "0" : "") + String(s);
-        }
-        else
-        {
-            // Just seconds
-            lbl = String(t) + "s";
-        }
-
-        // Draw label with smallest font (1)
-        int tw = tft.textWidth(lbl, 1);
-        tft.drawString(lbl, px - tw / 2, labelY, 1);
-    }
-
     lastUpdate = millis();
 }
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
@@ -1213,12 +1334,6 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
             if (doc.containsKey("pidKd"))
             {
                 pidKd = doc["pidKd"].as<double>();
-                settingsChanged = true;
-            }
-            if (doc.containsKey("tempOffset"))
-            {
-                tempOffset = doc["tempOffset"].as<double>();
-                DEBUG_PRINTF("Temperature offset changed to %.2f°C\n", tempOffset);
                 settingsChanged = true;
             }
 
@@ -1830,7 +1945,8 @@ void setupWebServer()
         pidKp = doc["pidKp"] | pidKp;
         pidKi = doc["pidKi"] | pidKi;
         pidKd = doc["pidKd"] | pidKd;
-        
+        tempFilterAlpha = doc["tempFilterAlpha"] | tempFilterAlpha;
+
         stabilizingTimeoutMinutes = doc["stabilizingTimeoutMinutes"] | stabilizingTimeoutMinutes;
         stabilizingToleranceStrict = doc["stabilizingToleranceStrict"] | stabilizingToleranceStrict;
         stabilizingToleranceWarning = doc["stabilizingToleranceWarning"] | stabilizingToleranceWarning;
@@ -1891,8 +2007,9 @@ void setupWebServer()
         doc["pidKp"] = pidKp;
         doc["pidKi"] = pidKi;
         doc["pidKd"] = pidKd;
-        doc["tempOffset"] = tempOffset;
-        
+        doc["tempFilterAlpha"] = tempFilterAlpha;
+
+    
         // Add program execution status (always include for consistency)
         doc["programName"] = currentProgramName;
         doc["programStep"] = programLoaded ? (currentProgram.currentStep + 1) : 0; // 1-indexed
@@ -1907,31 +2024,6 @@ void setupWebServer()
         response->addHeader("Pragma", "no-cache");
         response->addHeader("Expires", "0");
         request->send(response); });
-
-    // Calibrate offset endpoint: POST { "actualTemp": <float> }
-    server.on("/calibrate_offset", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
-              {
-                  StaticJsonDocument<256> doc;
-                  DeserializationError err = deserializeJson(doc, data, len);
-                  if (err) {
-                      request->send(400, "application/json", "{\"error\":\"invalid json\"}");
-                      return;
-                  }
-                  double actual = doc["actualTemp"] | NAN;
-                  if (isnan(actual)) {
-                      request->send(400, "application/json", "{\"error\":\"missing actualTemp\"}");
-                      return;
-                  }
-                  // Take a fresh raw reading (avoid stale)
-                  rawTemp = thermocouple.readCelsius();
-                  tempOffset = actual - rawTemp;
-                  saveSettings();
-                  StaticJsonDocument<256> outDoc;
-                  outDoc["rawTemp"] = rawTemp;
-                  outDoc["actualTemp"] = actual;
-                  outDoc["tempOffset"] = tempOffset;
-                  String outJson; serializeJson(outDoc, outJson);
-                  request->send(200, "application/json", outJson); });
 }
 
 // Try to connect as a station first (useful if you set WIFI_STA_SSID in include/pins.h)
@@ -2470,7 +2562,15 @@ void setup()
     tempPID.SetOutputLimits(0, 1023); // Full range for higher-resolution PWM output
 
     // Load settings from SD (update interval, PID tunings)
-    loadSettings();
+    if (!loadSettings())
+    {
+        DEBUG_PRINTLN("[SETUP] Aucun settings.json trouvé ou erreur de lecture, valeurs par défaut utilisées.");
+    }
+    else
+    {
+        DEBUG_PRINTF("[SETUP] Paramètres chargés: Kp=%.2f Ki=%.2f Kd=%.2f EMA=%.2f\n", pidKp, pidKi, pidKd, tempFilterAlpha);
+    }
+    tempPID.SetTunings(pidKp, pidKi, pidKd); // Applique les valeurs chargées au PID
 
     // Setup WiFi (SD credentials preferred, STA macro fallback, then AP)
     setupWiFi();
@@ -2509,17 +2609,16 @@ void loop()
     {
         // Read temperature from MAX6675 (no pin switching needed with dedicated Serial)
         rawTemp = thermocouple.readCelsius();
-        currentTemp = rawTemp + tempOffset;
+        currentTemp = rawTemp;
 
-        // Apply low-pass filter for maintenance logging (v1.6.1)
-        // filteredTemp = alpha * currentTemp + (1 - alpha) * filteredTemp
+        // Apply low-pass filter for maintenance logging (EMA, alpha configurable)
         if (filteredTemp == 0.0)
         {
             filteredTemp = currentTemp; // Initialize on first read
         }
         else
         {
-            filteredTemp = TEMP_FILTER_ALPHA * currentTemp + (1.0 - TEMP_FILTER_ALPHA) * filteredTemp;
+            filteredTemp = tempFilterAlpha * currentTemp + (1.0 - tempFilterAlpha) * filteredTemp;
         }
 
         lastTempRead = millis();
@@ -2665,7 +2764,7 @@ void loop()
             doc["pidKp"] = pidKp;
             doc["pidKi"] = pidKi;
             doc["pidKd"] = pidKd;
-            doc["tempOffset"] = tempOffset;
+            doc["tempFilterAlpha"] = tempFilterAlpha;
 
             // Program execution status (always include even if inactive for UI consistency)
             doc["program"] = programRunning ? 1 : 0;

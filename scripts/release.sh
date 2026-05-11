@@ -44,13 +44,12 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
-if ! command -v ~/.platformio/penv/bin/platformio &> /dev/null; then
-    print_error "PlatformIO n'est pas installé (~/.platformio/penv/bin/platformio)"
+if ! python3 -m platformio --version &> /dev/null; then
+    print_error "PlatformIO n'est pas installé (python3 -m platformio)"
     exit 1
 fi
 
-# Utiliser l'alias ou le chemin complet de PlatformIO
-PIO_CMD="~/.platformio/penv/bin/platformio"
+PIO_CMD="python3 -m platformio"
 
 # Vérifier qu'on est dans le bon répertoire
 if [ ! -f "platformio.ini" ]; then
@@ -81,11 +80,11 @@ if [ -n "$(git status --porcelain)" ]; then
     fi
 fi
 
-# Récupérer la version actuelle depuis src/main.cpp
+# Récupérer la version actuelle depuis include/config.h (source canonique)
 print_step "Récupération de la version actuelle..."
-CURRENT_VERSION=$(grep -oP 'FIRMWARE_VERSION = "\K[^"]+' src/main.cpp | head -1)
+CURRENT_VERSION=$(grep -oP '#define FIRMWARE_VERSION "\K[^"]+' include/config.h | head -1)
 if [ -z "$CURRENT_VERSION" ]; then
-    print_error "Impossible de trouver la version actuelle dans src/main.cpp"
+    print_error "Impossible de trouver la version actuelle dans include/config.h"
     exit 1
 fi
 
@@ -150,9 +149,10 @@ fi
 BUILD_DATE=$(date +%Y-%m-%d)
 
 # Mise à jour des fichiers
-print_step "Mise à jour de src/main.cpp..."
-sed -i "s/const char \*FIRMWARE_VERSION = \".*\";/const char *FIRMWARE_VERSION = \"$NEW_VERSION\";/" src/main.cpp
-print_success "src/main.cpp mis à jour"
+print_step "Mise à jour de include/config.h et src/main.cpp..."
+sed -i "s/#define FIRMWARE_VERSION \".*\"/#define FIRMWARE_VERSION \"$NEW_VERSION\"/" include/config.h
+sed -i "s/#define FIRMWARE_VERSION \".*\"/#define FIRMWARE_VERSION \"$NEW_VERSION\"/" src/main.cpp
+print_success "include/config.h et src/main.cpp mis à jour"
 
 print_step "Mise à jour de platformio.ini..."
 # Mise à jour de FIRMWARE_VERSION dans build_flags
@@ -233,6 +233,7 @@ HTML_FILES=(
     "data/www/control.html"
     "data/www/programs.html"
     "data/www/files.html"
+    "data/www/config.html"
 )
 
 for html_file in "${HTML_FILES[@]}"; do
@@ -247,11 +248,13 @@ done
 
 # Commit Git
 print_step "Commit des changements..."
-git add src/main.cpp platformio.ini README.md CHANGELOG.md "binaires/$BINARY_NAME"
-# Ajouter les fichiers HTML s'ils ont été modifiés
+# Staged : fichiers versionnés modifiés + tous les nouveaux fichiers src/ et include/
+git add -u
+git add src/ include/ platformio.ini README.md CHANGELOG.md
 for html_file in "${HTML_FILES[@]}"; do
     [ -f "$html_file" ] && git add "$html_file"
 done
+# Note : binaires/ est dans .gitignore — les binaires sont distribués via GitHub Releases
 git commit -m "Release v$NEW_VERSION
 
 $(echo -e "$CHANGELOG_ENTRIES")

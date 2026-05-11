@@ -44,12 +44,13 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
-if ! python3 -m platformio --version &> /dev/null; then
-    print_error "PlatformIO n'est pas installé (python3 -m platformio)"
+PIO_BIN="$HOME/.platformio/penv/bin/platformio"
+if ! "$PIO_BIN" --version &> /dev/null; then
+    print_error "PlatformIO n'est pas installé ($PIO_BIN)"
     exit 1
 fi
 
-PIO_CMD="python3 -m platformio"
+PIO_CMD="$PIO_BIN"
 
 # Vérifier qu'on est dans le bon répertoire
 if [ ! -f "platformio.ini" ]; then
@@ -217,14 +218,13 @@ else
     exit 1
 fi
 
-# Archivage du binaire
-print_step "Archivage du binaire..."
+# Archivage du binaire versionné (binaires/firmware.bin déjà copié par le post-build)
+print_step "Archivage du binaire versionné..."
 mkdir -p binaires
 BINARY_NAME="Four_Verrier_v${NEW_VERSION}.bin"
 cp "$FIRMWARE_PATH" "binaires/$BINARY_NAME"
-print_success "Binaire archivé: binaires/$BINARY_NAME"
-cp -f "$FIRMWARE_PATH" "binaires/firmware.bin"
-print_success "Binaire prêt pour upload sur ESP32: binaires/firmware.bin"
+print_success "Binaire archivé: binaires/$BINARY_NAME (gitignored — à joindre à la GitHub Release)"
+print_success "binaires/firmware.bin mis à jour par le post-build (accessible depuis le navigateur)"
 
 # Mise à jour des footers HTML avec la nouvelle version
 print_step "Mise à jour des footers HTML..."

@@ -442,8 +442,8 @@
             canvasOverview = document.getElementById('overviewGraph');
             ctxOverview = canvasOverview.getContext('2d');
             
-            // Load timeline estimation parameters from settings.json (v1.4.9)
-            fetch('/settings.json')
+            // Load timeline estimation parameters from settings file (v1.4.9)
+            fetch('/download?path=/config/settings.json')
                 .then(response => response.json())
                 .then(data => {
                     if (data.estimatedHeatingRate !== undefined) {
@@ -460,7 +460,7 @@
                     }
                 })
                 .catch(error => {
-                    console.warn('[TIMELINE] Could not load settings.json, using defaults:', error);
+                    console.warn('[TIMELINE] Could not load settings, using defaults:', error);
                 });
             
             // Set canvas sizes
@@ -518,30 +518,6 @@
             } else {
                 panel.style.display = 'none';
                 toggle.textContent = '►';
-            }
-        }
-
-        // Update realtime graph title with calculated duration based on updateInterval
-        function updateRealtimeGraphTitle(intervalMs) {
-            const totalSeconds = (MAX_HISTORY * intervalMs) / 1000;
-            const minutes = Math.round(totalSeconds / 60);
-            let durationText;
-            
-            if (minutes < 60) {
-                durationText = minutes + ' min';
-            } else {
-                const hours = Math.floor(minutes / 60);
-                const remainingMinutes = minutes % 60;
-                if (remainingMinutes === 0) {
-                    durationText = hours + 'h';
-                } else {
-                    durationText = hours + 'h' + remainingMinutes.toString().padStart(2, '0');
-                }
-            }
-            
-            const titleElement = document.getElementById('realtimeGraphTitle');
-            if (titleElement) {
-                titleElement.textContent = 'Zoom Temps Réel (' + durationText + ')';
             }
         }
 
@@ -2007,11 +1983,11 @@
             .then(s => {
                 if (typeof s.temp === 'number') {
                     document.getElementById('currentTemp').textContent = s.temp.toFixed(1) + '°C';
-                    tempHistory.push({time: s.elapsedSeconds || 0, temp: s.temp});
+                    tempHistory.push({time: s.totalElapsedSeconds || 0, temp: s.temp});
                 }
                 if (typeof s.target === 'number') {
                     document.getElementById('targetTemp').textContent = s.target.toFixed(1) + '°C';
-                    targetHistory.push({time: s.elapsedSeconds || 0, target: s.target});
+                    targetHistory.push({time: s.totalElapsedSeconds || 0, target: s.target});
                 }
                 // Initialize slider from status if available
                 if (typeof s.updateInterval === 'number') {

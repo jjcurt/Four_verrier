@@ -335,10 +335,9 @@
                     
                     <p><strong>Logging de données - v1.6.0 :</strong></p>
                     <ul style="margin: 10px 0; padding-left: 20px;">
-                        <li><code>enableUserLog</code> (optionnel): true pour log utilisateur (macroscopique, 6 colonnes, défaut: 30s)</li>
+                        <li><code>enableDataLog</code> (optionnel): true pour log utilisateur (macroscopique, 6 colonnes, défaut: 30s)</li>
                         <li><code>enableTestLog</code> (optionnel): true pour log test PID (18 colonnes + diagnostics PID, défaut: 5s)</li>
                         <li><code>enableMaintenanceLog</code> (optionnel): true pour log maintenance (21 colonnes + debug, défaut: 2s)</li>
-                        <li><code>enableDataLog</code> (déprécié mais accepté): équivalent à enableTestLog pour compatibilité</li>
                         <li><code>dataLogInterval</code> (optionnel): Période d'échantillonnage en ms (défaut selon type de log)</li>
                         <li><code>adaptiveLogging</code> (optionnel): true pour échantillonnage adaptatif intelligent (tous types)</li>
                         <li><code>adaptiveTempDelta</code> (optionnel): Seuil de changement de température en °C (défaut: 1.0)</li>
@@ -370,7 +369,7 @@
                     </ul>
                     
                     <p><strong>Exemple production (User Log) :</strong></p>
-                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">{"name":"Production_Verre","numSteps":3,"enableUserLog":true,"dataLogInterval":30000,"adaptiveLogging":true,"steps":[
+                    <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">{"name":"Production_Verre","numSteps":3,"enableDataLog":true,"dataLogInterval":30000,"adaptiveLogging":true,"steps":[
   {"targetTemp":520,"rampRate":100,"withRamp":true,"holdTime":240},
   {"targetTemp":480,"rampRate":50,"withRamp":false,"holdTime":120},
   {"targetTemp":0,"rampRate":30,"withRamp":false,"holdTime":0}
@@ -665,7 +664,7 @@
 
             // Logging configuration
             if (document.getElementById('enableUserLog').checked) {
-                program.enableUserLog = true;
+                program.enableDataLog = true;
             }
             if (document.getElementById('enableTestLog').checked) {
                 program.enableTestLog = true;

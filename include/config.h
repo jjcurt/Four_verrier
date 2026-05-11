@@ -1,39 +1,49 @@
 #pragma once
 
-// MAX6675 Thermocouple pins
-#define TEMP_CS_PIN 27
-#define TEMP_SO_PIN 35
-#define TEMP_SCK_PIN 22
+// =============================================================================
+// config.h — Paramètres système du four verrier
+//
+// Ce fichier contient UNIQUEMENT des constantes non-sensibles.
+// Les identifiants WiFi sont dans include/secrets.h (non versionné).
+//
+// CHANGEMENTS vs version précédente :
+//   - WIFI_AP_SSID / WIFI_AP_PASSWORD déplacés dans secrets.h
+//   - Doublons avec pins.h supprimés (MAX_TEMP, MIN_TEMP, TEMP_READ_INTERVAL,
+//     PID_INTERVAL, HTTP_PORT) — ces constantes n'existent plus que dans config.h
+// =============================================================================
 
-// SD Card pins (using VSPI)
-#define SD_CS_PIN 5
+// Firmware version (injectée par PlatformIO via build_flags si disponible)
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "1.6.1r5"
+#endif
 
-// SSR control pins
-#define SSR1_PIN 25 // First SSR control pin
-#define SSR2_PIN 26 // Second SSR control pin
-
-// Display pins are defined in User_Setup.h
-// TFT_MISO 12
-// TFT_MOSI 13
-// TFT_SCLK 14
-// TFT_CS   15
-// TFT_DC    2
-// TOUCH_CS 33
-
-// Network configuration
-#define WIFI_AP_SSID "Four_Verrier_AP"
-#define WIFI_AP_PASSWORD "JJCFM2025"
-
-// Web server port
+// --- Serveur web ---
 #define HTTP_PORT 80
 
-// Temperature control parameters
-#define MAX_TEMP 1000           // Maximum allowable temperature in Celsius
-#define MIN_TEMP 0              // Minimum temperature reading
-#define TEMP_READ_INTERVAL 1000 // Temperature reading interval in ms
-#define PID_INTERVAL 1000       // PID computation interval in ms
+// --- Paramètres de contrôle de température ---
+#define MAX_TEMP           1000  // Température maximale autorisée (°C)
+#define MIN_TEMP           0     // Température minimale de lecture (°C)
+#define TEMP_READ_INTERVAL 1000  // Intervalle de lecture de la sonde (ms)
+#define PID_INTERVAL       1000  // Intervalle de calcul PID (ms)
 
-// SD Card configuration
-#define SD_PROGRAMS_DIR "/programs" // Directory for storing firing programs
-#define SD_LOGS_DIR "/logs"         // Directory for storing log files
-#define SD_WEB_DIR "/www"           // Directory for web files
+// --- Répertoires SD card ---
+#define SD_PROGRAMS_DIR "/programs"
+#define SD_LOGS_DIR     "/logs"
+#define SD_WEB_DIR      "/www"
+#define SD_CONFIG_DIR   "/config"
+#define SD_UPDATES_DIR  "/updates"
+
+// --- Affichage ---
+#define SCREEN_WIDTH      320
+#define SCREEN_HEIGHT     240
+#define FONT_SIZE_SMALL   2
+#define FONT_SIZE_LARGE   4
+
+// --- Graphe température ---
+#define GRAPH_W 300  // Nombre d'échantillons dans le buffer circulaire
+#define GRAPH_H 60   // Hauteur en pixels (référence, zone affichage = 125px)
+
+// --- Logging adaptatif ---
+#define DEFAULT_LOG_INTERVAL     5000  // ms entre deux points de log
+#define ADAPTIVE_TEMP_DELTA      0.5f  // °C minimum de variation pour logguer
+#define ADAPTIVE_PWM_DELTA       51    // ~5% de 1023

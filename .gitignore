@@ -1,9 +1,21 @@
+# =============================================================================
+# Ajouts au .gitignore existant pour le projet Four_verrier
+# Copier-coller ces lignes dans votre .gitignore à la racine du projet
+# =============================================================================
+
+# Fichier de secrets — NE JAMAIS COMMITER
+include/secrets.h
+
+# Binaires de compilation PlatformIO (si pas déjà présents)
+.pio/
+.vscode/
+
 # PlatformIO build artifacts
-.pio
-.vscode/.browse.c_cpp.db*
-.vscode/c_cpp_properties.json
-.vscode/launch.json
-.vscode/ipch
+#.pio
+#.vscode/.browse.c_cpp.db*
+#.vscode/c_cpp_properties.json
+#.vscode/launch.json
+#.vscode/ipch
 
 # Binaires compilés et firmwares
 *.bin

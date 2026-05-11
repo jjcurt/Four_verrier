@@ -1,66 +1,60 @@
 #pragma once
 #include <Arduino.h>
 
-// Structure for a single program step
+enum ProgramPhase { PHASE_IDLE, PHASE_RAMP, PHASE_HOLD };
+
 struct ProgramStep
 {
-    float targetTemp;  // Target temperature in Celsius
-    float rampRate;    // Temperature increase rate (°C/minute, 0 for hold)
-    uint32_t holdTime; // Hold time in minutes
-    bool withRamp;     // Whether this step includes a ramp phase
+    float    targetTemp;
+    float    rampRate;
+    uint32_t holdTime;
+    bool     withRamp;
 };
 
-// Structure for a complete firing program
 struct FiringProgram
 {
-    char name[32];         // Program name
-    uint8_t numSteps;      // Number of steps in the program
-    ProgramStep steps[10]; // Array of program steps (max 10 steps)
-    bool active;           // Whether this program is currently running
-    uint8_t currentStep;   // Current step being executed
+    char        name[32];
+    uint8_t     numSteps;
+    ProgramStep steps[10];
+    bool        active;
+    uint8_t     currentStep;
 
-    // Data logging options (v1.6.0+)
-    bool enableDataLog;        // User log (basic CSV)
-    bool enableTestLog;        // Test log (PID tuning with extra columns)
-    bool enableMaintenanceLog; // Maintenance log (full debug data)
-    uint32_t dataLogInterval;  // Logging interval in ms (default 5000)
-    bool adaptiveLogging;      // Adaptive sampling (reduce volume by ~95%)
+    bool     enableDataLog;
+    bool     enableTestLog;
+    bool     enableMaintenanceLog;
+    uint32_t dataLogInterval;
+    bool     adaptiveLogging;
 
-    // Adaptive logging thresholds
-    float adaptiveTempDelta; // Min temp change to log (default 0.5°C)
-    float adaptivePwmDelta;  // Min PWM change to log (default 5%)
+    float adaptiveTempDelta;
+    float adaptivePwmDelta;
 
-    // Manual mode for open-loop testing
-    bool manualMode;    // Override PID with manual PWM
-    uint16_t manualPWM; // Manual PWM value (0-1023)
+    bool     manualMode;
+    uint16_t manualPWM;
 
-    // PID reset control (v1.6.1)
-    bool disablePidReset; // Disable PID reset between steps
+    bool disablePidReset;
 };
 
-// Structure for current furnace state
 struct FurnaceState
 {
-    float currentTemp;      // Current temperature
-    float targetTemp;       // Current target temperature
-    float rampRate;         // Current ramp rate
-    uint32_t stepStartTime; // Start time of current step
-    uint32_t holdEndTime;   // End time of current hold
-    bool ssr1Active;        // SSR 1 state
-    bool ssr2Active;        // SSR 2 state (true if <> 0)
-    uint8_t ssr2Pwm;        // SSR 2 PWM value
-    bool programRunning;    // Whether a program is running
-    char programName[32];   // Name of current program
-    uint8_t currentStep;    // Current step number
-    char statusMessage[64]; // Current status message
+    float    currentTemp;
+    float    targetTemp;
+    float    rampRate;
+    uint32_t stepStartTime;
+    uint32_t holdEndTime;
+    bool     ssr1Active;
+    bool     ssr2Active;
+    uint8_t  ssr2Pwm;
+    bool     programRunning;
+    char     programName[32];
+    uint8_t  currentStep;
+    char     statusMessage[64];
 };
 
-// PID control parameters structure
 struct PIDParams
 {
-    double kp;        // Proportional gain
-    double ki;        // Integral gain
-    double kd;        // Derivative gain
-    double outputMin; // Minimum output value
-    double outputMax; // Maximum output value
+    double kp;
+    double ki;
+    double kd;
+    double outputMin;
+    double outputMax;
 };

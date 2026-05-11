@@ -226,25 +226,9 @@ cp "$FIRMWARE_PATH" "binaires/$BINARY_NAME"
 print_success "Binaire archivé: binaires/$BINARY_NAME (gitignored — à joindre à la GitHub Release)"
 print_success "binaires/firmware.bin mis à jour par le post-build (accessible depuis le navigateur)"
 
-# Mise à jour des footers HTML avec la nouvelle version
+# Mise à jour des footers HTML (version + date de release)
 print_step "Mise à jour des footers HTML..."
-HTML_FILES=(
-    "data/www/index.html"
-    "data/www/control.html"
-    "data/www/programs.html"
-    "data/www/files.html"
-    "data/www/config.html"
-)
-
-for html_file in "${HTML_FILES[@]}"; do
-    if [ -f "$html_file" ]; then
-        # Mise à jour du build-footer avec la nouvelle version
-        sed -i "s/v[0-9]\+\.[0-9]\+\.[0-9]\+/v$NEW_VERSION/g" "$html_file"
-        print_success "  $html_file mis à jour"
-    else
-        print_warning "  $html_file introuvable (ignoré)"
-    fi
-done
+bash "$(dirname "$0")/update_html_version.sh" "$NEW_VERSION"
 
 # Commit Git
 print_step "Commit des changements..."

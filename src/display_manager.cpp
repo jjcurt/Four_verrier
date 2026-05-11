@@ -16,7 +16,6 @@
 extern TFT_eSPI      tft;
 extern double        currentTemp;
 extern double        targetTemp;
-extern bool          lastSsr1State;
 extern uint16_t      ssr2Pwm;
 extern bool          programLoaded;
 extern bool          programRunning;
@@ -25,6 +24,9 @@ extern unsigned long programStartMs;
 extern ProgramPhase      currentPhase;
 extern bool          isStabilizing;
 extern unsigned long phaseStartMs;
+extern unsigned long stepStartMs;
+extern float         rampStartTemp;
+extern double        stabilizingToleranceStrict;
 extern float         tempSamples[];
 extern int           tempSampleIdx;
 extern bool          tempSamplesFilled;
@@ -38,16 +40,24 @@ void drawStaticUI()
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(1);
 
-    // Séparateurs horizontaux entre les trois zones
-    tft.drawFastHLine(0, 57, SCREEN_WIDTH, TFT_DARKGREY);
-    tft.drawFastHLine(0, DISP_GRAPH_TOP_Y, SCREEN_WIDTH, TFT_DARKGREY);
+    // Séparateurs horizontaux
+    tft.drawFastHLine(0, 57,             SCREEN_WIDTH, TFT_DARKGREY);
+    tft.drawFastHLine(0, DISP_GRAPH_TOP_Y - 1, SCREEN_WIDTH, TFT_DARKGREY);
 
-    // Labels SSR (valeur fixe, redessinée aussi par updateDisplay)
-    tft.drawString("SSR1", DISP_SSR1_LABEL_X, DISP_SSR1_LABEL_Y, 2);
+    // Étiquettes zone température
+    tft.drawString("Four:",  DISP_TEMP_LABEL_X,   DISP_TEMP_LABEL_Y,   2);
+    tft.drawString("C",      DISP_TEMP_UNIT_X,     DISP_TEMP_UNIT_Y,    2);
+    tft.drawString("Cible:", DISP_TARGET_LABEL_X,  DISP_TARGET_LABEL_Y, 2);
+    tft.drawString("C",      DISP_TARGET_UNIT_X,   DISP_TARGET_UNIT_Y,  2);
+
+    // Étiquette SSR2 + cadre barre PWM (SSR1 supprimé: redondant avec état programme)
     tft.drawString("SSR2", DISP_SSR2_LABEL_X, DISP_SSR2_LABEL_Y, 2);
+    tft.drawRect(DISP_SSR2_BAR_X, DISP_SSR2_BAR_Y, DISP_SSR2_BAR_W, DISP_SSR2_BAR_H, TFT_WHITE);
 
-    // Cadre fixe de la barre PWM SSR2 (coordonnées identiques à updateDisplay)
-    tft.drawRect(210, 40, 80, 14, TFT_WHITE);
+    // Étiquettes zone programme
+    tft.drawString("Prog:",  DISP_PROG_LABEL_X,  DISP_PROG_ROW_Y,    2);
+    tft.drawString("Etape:", DISP_STEP_LABEL_X,  DISP_STATUS_ROW_Y,  2);
+    tft.drawString("Temps:", DISP_TIME_LABEL_X,  DISP_STATUS_ROW_Y,  2);
 }
 
 // ---------------------------------------------------------------------------
@@ -55,108 +65,154 @@ void drawStaticUI()
 // ---------------------------------------------------------------------------
 void updateDisplay(bool force)
 {
-    static unsigned long lastUpdate = 0;
-    if (!force && millis() - lastUpdate < 1000)
+    static unsigned long lastTopUpdate   = 0;
+    static unsigned long lastGraphUpdate = 0;
+
+    const unsigned long now = millis();
+    bool doTop   = force || (now - lastTopUpdate   >= 250);
+    bool doGraph = force || (now - lastGraphUpdate >= 1000);
+
+    if (!doTop && !doGraph)
         return;
 
     // -------------------------------------------------------------------------
     // PARTIE 1 — Bandeau supérieur (température, SSR, état programme)
     // -------------------------------------------------------------------------
-
-    int tempColor = TFT_WHITE;
-    if (currentTemp < targetTemp - 2.0)
-        tempColor = TFT_CYAN;
-    else if (currentTemp > targetTemp + 2.0)
-        tempColor = TFT_ORANGE;
-    else
-        tempColor = TFT_GREEN;
-
-    // Température four
-    tft.fillRect(DISP_TEMP_X, DISP_TEMP_Y, DISP_TEMP_W, DISP_TEMP_H, TFT_BLACK);
-    tft.setTextColor(tempColor, TFT_BLACK);
-    tft.setTextSize(4);
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%5.1f", currentTemp);
-    tft.drawString(buf, DISP_TEMP_X, DISP_TEMP_Y, 4);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setTextSize(2);
-    tft.drawString("C", DISP_TEMP_UNIT_X, DISP_TEMP_UNIT_Y, 2);
-
-    // Température cible
-    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-    snprintf(buf, sizeof(buf), "Cible: %5.1f", targetTemp);
-    tft.drawString(buf, DISP_TARGET_X, DISP_TARGET_Y, 2);
-
-    // SSR1 : label + carré indicateur
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawString("SSR1", DISP_SSR1_LABEL_X, DISP_SSR1_LABEL_Y, 2);
-    tft.fillRect(DISP_SSR1_BOX_X, DISP_SSR1_BOX_Y, DISP_SSR1_BOX_W, DISP_SSR1_BOX_H,
-                 lastSsr1State ? TFT_RED : TFT_DARKGREY);
-    tft.drawRect(DISP_SSR1_BOX_X, DISP_SSR1_BOX_Y, DISP_SSR1_BOX_W, DISP_SSR1_BOX_H, TFT_WHITE);
-
-    // SSR2 : label + barre PWM (y=40 → légèrement sous le label SSR2 à y=40)
-    tft.drawString("SSR2", DISP_SSR2_LABEL_X, DISP_SSR2_LABEL_Y, 2);
-    tft.drawRect(210, 40, 80, 14, TFT_WHITE);
-    int pwmW = (int)(ssr2Pwm / 1023.0 * 78.0);
-    tft.fillRect(211, 41, pwmW, 12, TFT_ORANGE);
-
-    // Nom du programme
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.fillRect(DISP_PROG_NAME_X, DISP_PROG_ROW_Y, DISP_PROG_NAME_W, 20, TFT_BLACK);
-    snprintf(buf, sizeof(buf), "%s", programLoaded ? currentProgram.name : "-");
-    tft.drawString(buf, DISP_PROG_NAME_X, DISP_PROG_ROW_Y, 2);
-
-    // Étape courante / total
-    tft.fillRect(DISP_STEP_X, DISP_PROG_ROW_Y, DISP_STEP_W, 20, TFT_BLACK);
-    if (programLoaded)
-        snprintf(buf, sizeof(buf), "Etape: %d/%d", currentProgram.currentStep + 1, currentProgram.numSteps);
-    else
-        snprintf(buf, sizeof(buf), "Etape: -");
-    tft.drawString(buf, DISP_STEP_X, DISP_PROG_ROW_Y, 2);
-
-    // Temps écoulé
-    tft.fillRect(DISP_TIME_X, DISP_PROG_ROW_Y, DISP_TIME_W, 20, TFT_BLACK);
-    if (programRunning)
+    if (doTop)
     {
-        unsigned long elapsed = (millis() - programStartMs) / 1000;
-        int min = elapsed / 60;
-        int sec = elapsed % 60;
-        snprintf(buf, sizeof(buf), "%02d:%02d", min, sec);
-        tft.drawString(buf, DISP_TIME_X, DISP_PROG_ROW_Y, 2);
-    }
-    else
-    {
-        tft.drawString("--:--", DISP_TIME_X, DISP_PROG_ROW_Y, 2);
-    }
+        char buf[16];
 
-    // Phase (IDLE / RAMP / HOLD / STAB)
-    tft.fillRect(DISP_STATE_X, DISP_PROG_ROW_Y, DISP_STATE_W, 20, TFT_BLACK);
-    const char *stateStr = "IDLE";
-    if (programRunning && programLoaded)
-    {
-        if (currentPhase == PHASE_RAMP)      stateStr = "RAMP";
-        else if (currentPhase == PHASE_HOLD) stateStr = "HOLD";
-        else if (isStabilizing)              stateStr = "STAB";
+        // --- Température four (valeur colorée selon état) ---
+        uint16_t tempColor;
+        if (!programRunning)
+        {
+            tempColor = (currentTemp > 50.0) ? DISP_VIOLET : TFT_WHITE;
+        }
+        else
+        {
+            switch (currentPhase)
+            {
+            case PHASE_RAMP:
+                tempColor = (currentProgram.steps[currentProgram.currentStep].targetTemp
+                             < rampStartTemp) ? DISP_VIOLET : DISP_ORANGE;
+                break;
+            case PHASE_HOLD:
+                if      (currentTemp < targetTemp - stabilizingToleranceStrict) tempColor = DISP_CYAN;
+                else if (currentTemp > targetTemp + stabilizingToleranceStrict) tempColor = DISP_RED;
+                else                                                             tempColor = TFT_GREEN;
+                break;
+            default:
+                tempColor = TFT_WHITE;
+            }
+        }
+        tft.fillRect(DISP_TEMP_X, DISP_TEMP_Y, DISP_TEMP_W, DISP_TEMP_H, TFT_BLACK);
+        tft.setTextColor(tempColor, TFT_BLACK);
+        snprintf(buf, sizeof(buf), "%5.1f", currentTemp);
+        tft.drawString(buf, DISP_TEMP_X, DISP_TEMP_Y, 4);
+
+        // --- Température cible (jaune, label statique) ---
+        tft.fillRect(DISP_TARGET_X, DISP_TARGET_Y, DISP_TARGET_W, DISP_TARGET_H, TFT_BLACK);
+        tft.setTextColor(DISP_YELLOW, TFT_BLACK);
+        snprintf(buf, sizeof(buf), "%5.1f", targetTemp);
+        tft.drawString(buf, DISP_TARGET_X, DISP_TARGET_Y, 4);
+
+        // --- Phase (haut droite, font 4, colorée — remplace SSR1) ---
+        {
+            const char *phaseStr = "IDLE";
+            uint16_t phaseColor  = TFT_DARKGREY;
+            if (programRunning && programLoaded)
+            {
+                if      (currentPhase == PHASE_RAMP && isStabilizing) { phaseStr = "STAB"; phaseColor = DISP_YELLOW; }
+                else if (currentPhase == PHASE_RAMP)                   { phaseStr = "RAMP"; phaseColor = DISP_ORANGE; }
+                else if (currentPhase == PHASE_HOLD)                   { phaseStr = "HOLD"; phaseColor = TFT_GREEN;  }
+            }
+            tft.fillRect(DISP_PHASE_TOP_X, DISP_PHASE_TOP_Y, DISP_PHASE_TOP_W, DISP_PHASE_TOP_H, TFT_BLACK);
+            tft.setTextColor(phaseColor, TFT_BLACK);
+            tft.drawString(phaseStr, DISP_PHASE_TOP_X, DISP_PHASE_TOP_Y, 4);
+        }
+
+        // --- SSR2 barre PWM (cadre statique, remplissage dynamique) ---
+        int pwmW = (int)(ssr2Pwm / 1023.0 * DISP_SSR2_FILL_MAX);
+        tft.fillRect(DISP_SSR2_FILL_X, DISP_SSR2_FILL_Y,
+                     DISP_SSR2_FILL_MAX, DISP_SSR2_BAR_H - 2, TFT_BLACK);
+        if (pwmW > 0)
+            tft.fillRect(DISP_SSR2_FILL_X, DISP_SSR2_FILL_Y,
+                         pwmW, DISP_SSR2_BAR_H - 2, DISP_ORANGE);
+
+        // --- Nom du programme ---
+        tft.fillRect(DISP_PROG_NAME_X, DISP_PROG_ROW_Y, DISP_PROG_NAME_W, 16, TFT_BLACK);
+        tft.setTextColor(programRunning ? TFT_GREEN : TFT_WHITE, TFT_BLACK);
+        tft.drawString(programLoaded ? currentProgram.name : "Idle",
+                       DISP_PROG_NAME_X, DISP_PROG_ROW_Y, 2);
+
+        // --- Étape ---
+        tft.fillRect(DISP_STEP_X, DISP_STATUS_ROW_Y, DISP_STEP_W, 16, TFT_BLACK);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        if (programLoaded)
+            snprintf(buf, sizeof(buf), "%d/%d",
+                     currentProgram.currentStep + 1, currentProgram.numSteps);
+        else
+            snprintf(buf, sizeof(buf), "0");
+        tft.drawString(buf, DISP_STEP_X, DISP_STATUS_ROW_Y, 2);
+
+        // --- Temps étape [H:MM:SS] ---
+        tft.fillRect(DISP_STEP_TIME_X, DISP_STATUS_ROW_Y, DISP_STEP_TIME_W, 16, TFT_BLACK);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        if (programRunning && programLoaded)
+        {
+            unsigned long stepElapsed = (millis() - stepStartMs) / 1000;
+            int sHrs = stepElapsed / 3600;
+            int sMn  = (stepElapsed % 3600) / 60;
+            int sSec = stepElapsed % 60;
+            snprintf(buf, sizeof(buf), "[%d:%02d:%02d]", sHrs, sMn, sSec);
+        }
+        else
+        {
+            snprintf(buf, sizeof(buf), "[--:--]");
+        }
+        tft.drawString(buf, DISP_STEP_TIME_X, DISP_STATUS_ROW_Y, 2);
+
+        // --- Temps écoulé (format H:MM:SS) ---
+        tft.fillRect(DISP_TIME_X, DISP_STATUS_ROW_Y, DISP_TIME_W, 16, TFT_BLACK);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        if (programRunning)
+        {
+            unsigned long elapsed = (millis() - programStartMs) / 1000;
+            int hrs = elapsed / 3600;
+            int mn  = (elapsed % 3600) / 60;
+            int sec = elapsed % 60;
+            snprintf(buf, sizeof(buf), "%d:%02d:%02d", hrs, mn, sec);
+        }
+        else
+        {
+            snprintf(buf, sizeof(buf), "0:00:00");
+        }
+        tft.drawString(buf, DISP_TIME_X, DISP_STATUS_ROW_Y, 2);
+
+        lastTopUpdate = millis();
     }
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawString(stateStr, DISP_STATE_X, DISP_PROG_ROW_Y, 2);
 
     // -------------------------------------------------------------------------
     // PARTIE 2 — Zone graphe (idle) ou timeline (programme en cours)
     // -------------------------------------------------------------------------
-
+    if (doGraph)
+    {
     int screenW = tft.width();
 
     if (!programRunning || !programLoaded)
     {
-        // --- Mode IDLE : graphe de température circulaire ---
-        const int gx = DISP_GRAPH_LEFT_MARGIN;
-        const int gy = DISP_GRAPH_TOP_Y;
-        const int gw = screenW - DISP_GRAPH_LEFT_MARGIN - DISP_GRAPH_RIGHT_MARGIN;
-        const int gh = DISP_GRAPH_HEIGHT;
+        // --- Mode IDLE : graphe de température ---
+        const int gx     = DISP_GRAPH_LEFT_MARGIN;
+        const int gy     = DISP_GRAPH_TOP_Y;
+        const int gw     = screenW - DISP_GRAPH_LEFT_MARGIN - DISP_GRAPH_RIGHT_MARGIN;
+        const int gh     = DISP_GRAPH_HEIGHT;
+        const int plotH  = gh - DISP_GRAPH_XLABEL_H;   // zone tracé (hors labels X)
+        const int xAxisY = gy + plotH;                  // y de la ligne X
 
-        tft.fillRect(0, gy, DISP_GRAPH_LEFT_MARGIN, gh, TFT_BLACK);
-        tft.fillRect(gx, gy, gw, gh, TFT_DARKGREY);
+        // Fonds
+        tft.fillRect(0,  gy, gx, gh,    TFT_BLACK);     // marge gauche labels Y
+        tft.fillRect(gx, gy, gw, plotH, TFT_BLACK);      // zone tracé
+        tft.fillRect(gx, xAxisY, gw, DISP_GRAPH_XLABEL_H, TFT_BLACK); // zone labels X
 
         float minT = 9999.0, maxT = -9999.0;
         int count = tempSamplesFilled ? GRAPH_W : tempSampleIdx;
@@ -182,36 +238,56 @@ void updateDisplay(bool force)
         if (minT >= maxT) maxT = minT + 1.0f;
 
         // Axes
-        tft.drawFastVLine(gx, gy, gh, TFT_WHITE);
-        tft.drawFastHLine(gx, gy + gh, gw, TFT_WHITE);
+        tft.drawFastVLine(gx, gy,     plotH, TFT_WHITE);  // axe Y
+        tft.drawFastHLine(gx, xAxisY, gw,    TFT_WHITE);  // axe X (visible !)
 
         // Graduations Y (5 niveaux)
         for (int g = 0; g <= 4; ++g)
         {
-            int yy = gy + g * (gh / 4);
-            tft.drawFastHLine(gx, yy, gw, TFT_BLACK);
+            int yy = gy + g * (plotH / 4);
+            tft.drawFastHLine(gx, yy, gw, TFT_DARKGREY);
             float val = maxT - (maxT - minT) * (float)g / 4.0f;
             String label = String(val, (maxT - minT) < 20 ? 1 : 0);
             tft.setTextColor(TFT_WHITE, TFT_BLACK);
-            tft.drawString(label, 2, yy - 6, 1);
+            int labelY = max(yy - 6, gy + 1);
+            tft.drawString(label, 2, labelY, 1);
         }
 
-        // Tracé de la courbe
+        // Graduations X (toutes les minutes — buffer 300s à 1s/sample)
+        {
+            float pxPerMin = (float)gw * 60.0f / GRAPH_W;  // ~54.6 px/min
+            for (int t = 0; t <= 5; ++t)
+            {
+                int xTick = gx + gw - 1 - (int)(t * pxPerMin);
+                if (xTick < gx) continue;
+                tft.drawFastVLine(xTick, xAxisY, 4, TFT_WHITE);
+                char tLabel[6];
+                if (t == 0) snprintf(tLabel, sizeof(tLabel), "0");
+                else        snprintf(tLabel, sizeof(tLabel), "-%dm", t);
+                tft.setTextColor(TFT_WHITE, TFT_BLACK);
+                tft.drawCentreString(tLabel, xTick, xAxisY + 4, 1);
+            }
+        }
+
+        // Tracé de la courbe (alignée à droite : bord droit = maintenant)
         int plotCount = (count > gw) ? gw : count;
         if (plotCount > 1)
         {
             int startIdx = tempSamplesFilled
                 ? ((count > gw) ? ((tempSampleIdx - gw + GRAPH_W) % GRAPH_W) : 0)
                 : 0;
-            int prevX = gx;
+            int xOffset = gw - plotCount;   // décalage pour ancrer la courbe à droite
+            int prevX = gx + xOffset;
             float firstSample = tempSamples[startIdx];
-            int prevY = gy + gh - (int)((firstSample - minT) / (maxT - minT) * (gh - 1));
+            int prevY = xAxisY - 1 - (int)((firstSample - minT) / (maxT - minT) * (plotH - 1));
+            prevY = constrain(prevY, gy, xAxisY - 1);
             for (int i = 1; i < plotCount; ++i)
             {
                 int idx = tempSamplesFilled ? ((startIdx + i) % GRAPH_W) : i;
-                int px = gx + i;
+                int px = gx + xOffset + i;
                 float s = tempSamples[idx];
-                int y = gy + gh - (int)((s - minT) / (maxT - minT) * (gh - 1));
+                int y = xAxisY - 1 - (int)((s - minT) / (maxT - minT) * (plotH - 1));
+                y = constrain(y, gy, xAxisY - 1);
                 tft.drawLine(prevX, prevY, px, y, TFT_GREEN);
                 prevX = px;
                 prevY = y;
@@ -277,7 +353,7 @@ void updateDisplay(bool force)
                         // Rampe : bloc orange incliné
                         int yMin   = (y1Bloc < y0Bloc) ? y1Bloc : y0Bloc;
                         int height = abs(y1Bloc - y0Bloc);
-                        tft.fillRect(xBloc, yMin, blockW, height, TFT_ORANGE);
+                        tft.fillRect(xBloc, yMin, blockW, height, DISP_ORANGE);
                         tft.drawRect(xBloc, yMin, blockW, height, TFT_WHITE);
 
                         if (i == currentProgram.currentStep && programRunning && currentPhase == PHASE_RAMP)
@@ -288,9 +364,9 @@ void updateDisplay(bool force)
                             if (fillH > 0)
                             {
                                 if (y1Bloc < y0Bloc) // montée
-                                    tft.fillRect(xBloc, y0Bloc - fillH, blockW, fillH, TFT_YELLOW);
+                                    tft.fillRect(xBloc, y0Bloc - fillH, blockW, fillH, DISP_YELLOW);
                                 else                 // descente
-                                    tft.fillRect(xBloc, y0Bloc, blockW, fillH, TFT_YELLOW);
+                                    tft.fillRect(xBloc, y0Bloc, blockW, fillH, DISP_YELLOW);
                             }
                         }
                     }
@@ -309,7 +385,7 @@ void updateDisplay(bool force)
                             progress = constrain(progress, 0.0f, 1.0f);
                             int fillW = (int)(blockW * progress);
                             if (fillW > 0)
-                                tft.fillRect(xBloc, yPalier, fillW, 8, TFT_BLUE);
+                                tft.fillRect(xBloc, yPalier, fillW, 8, DISP_BLUE);
                         }
                     }
 
@@ -330,7 +406,8 @@ void updateDisplay(bool force)
         tft.setTextColor(TFT_WHITE, TFT_BLACK);
     }
 
-    lastUpdate = millis();
+        lastGraphUpdate = millis();
+    } // if (doGraph)
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +419,7 @@ void displayStartupScreen()
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(1);
     tft.drawString("Four Verrier", 10, 10, 4);
-    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.setTextColor(DISP_YELLOW, TFT_BLACK);
     String versionText = "Firmware: " + String(FIRMWARE_VERSION);
     tft.drawString(versionText, 10, 45, 2);
     tft.drawFastHLine(10, 70, 300, TFT_DARKGREY);
@@ -361,12 +438,12 @@ void displayStartupScreen()
     else if (WiFi.getMode() == WIFI_AP)
     {
         ipAddress = WiFi.softAPIP().toString();
-        tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        tft.setTextColor(DISP_YELLOW, TFT_BLACK);
     }
     else
     {
         ipAddress = "Non connecte";
-        tft.setTextColor(TFT_RED, TFT_BLACK);
+        tft.setTextColor(DISP_RED, TFT_BLACK);
     }
     tft.drawString(ipAddress, 130, yPos, 2);
     yPos += 25;
@@ -378,8 +455,8 @@ void displayStartupScreen()
     {
         int32_t rssi = WiFi.RSSI();
         if (rssi > -50)      tft.setTextColor(TFT_GREEN, TFT_BLACK);
-        else if (rssi > -70) tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        else                 tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+        else if (rssi > -70) tft.setTextColor(DISP_YELLOW, TFT_BLACK);
+        else                 tft.setTextColor(DISP_ORANGE, TFT_BLACK);
         tft.drawString(String(rssi) + " dBm", 130, yPos, 2);
 
         // Barres de signal (5 barres, seuils -90/-80/-70/-60/-50 dBm)
@@ -394,12 +471,12 @@ void displayStartupScreen()
     }
     else if (WiFi.getMode() == WIFI_AP)
     {
-        tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        tft.setTextColor(DISP_YELLOW, TFT_BLACK);
         tft.drawString("Mode AP", 130, yPos, 2);
     }
     else
     {
-        tft.setTextColor(TFT_RED, TFT_BLACK);
+        tft.setTextColor(DISP_RED, TFT_BLACK);
         tft.drawString("Non dispo", 130, yPos, 2);
     }
     yPos += 25;
@@ -419,7 +496,7 @@ void displayStartupScreen()
     }
     else
     {
-        tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+        tft.setTextColor(DISP_ORANGE, TFT_BLACK);
         tft.drawString("Non synchronise", 10, yPos + 20, 2);
     }
 

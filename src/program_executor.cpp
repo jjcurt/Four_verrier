@@ -23,6 +23,7 @@ extern double         currentTemp;
 extern double         targetTemp;
 extern unsigned long  programStartMs;
 extern unsigned long  phaseStartMs;
+extern unsigned long  stepStartMs;
 extern unsigned long  effectiveHoldStartMs;
 extern float          rampStartTemp;
 extern bool           isStabilizing;
@@ -147,6 +148,7 @@ void executeProgramStep()
         {
             currentPhase  = PHASE_RAMP;
             phaseStartMs  = now;
+            stepStartMs   = now;
             rampStartTemp = (float)currentTemp;
             DEBUG_PRINTF("Step %d: RAMP %.1f→%.1f°C @ %.1f°C/min\n",
                          stepIndex + 1, rampStartTemp, step.targetTemp, step.rampRate);
@@ -156,6 +158,7 @@ void executeProgramStep()
             targetTemp           = step.targetTemp;
             currentPhase         = PHASE_HOLD;
             phaseStartMs         = now;
+            stepStartMs          = now;
             effectiveHoldStartMs = now;
             DEBUG_PRINTF("Step %d: HOLD %.1f°C %dmin\n",
                          stepIndex + 1, step.targetTemp, step.holdTime);

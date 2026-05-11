@@ -11,8 +11,9 @@
 #define TFT_WIDTH  240
 #define TFT_HEIGHT 320
 
-// Color order
-#define TFT_RGB 1
+// Color order : RGB (pas de BGR bit dans MADCTL)
+// Le panel CYD a un swap R↔B physique corrigé par alias DISP_xxx dans display_layout.h
+#define TFT_RGB_ORDER 1   // 1 = TFT_RGB → fond noir correct, pas d'inversion
 
 // Backlight control
 #define TFT_BL   21

@@ -137,6 +137,7 @@ bool           programRunning     = false;
 // Phase d'exécution
 ProgramPhase  currentPhase  = PHASE_IDLE;  // type défini dans furnace_types.h
 unsigned long phaseStartMs  = 0;
+unsigned long stepStartMs   = 0;           // début de l'étape courante (ramp + hold)
 float         rampStartTemp = 0;
 
 // Stabilisation
@@ -162,7 +163,7 @@ void setup()
 
     // 1. TFT
     tft.init();
-    tft.setRotation(1);
+    tft.setRotation(3);
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.drawString("Demarrage...", 10, 10, 2);

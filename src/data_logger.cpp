@@ -92,6 +92,9 @@ void startDataLog(const String &programName)
     strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &timeinfo);
 
     String safeName = programName;
+    // Supprimer l'extension .json si présente (le nom du programme vient du nom de fichier)
+    if (safeName.endsWith(".json") || safeName.endsWith(".JSON"))
+        safeName.remove(safeName.length() - 5);
     safeName.replace(" ", "_");
     safeName.replace("/", "_");
     safeName.replace("\\", "_");

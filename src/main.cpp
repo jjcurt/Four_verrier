@@ -24,7 +24,7 @@
 // #define DEBUG_SERIAL   // ← Décommenter uniquement en développement
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "1.6.1r11"
+#define FIRMWARE_VERSION "1.6.1r12"
 #endif
 const char *firmwareVersion = FIRMWARE_VERSION;
 

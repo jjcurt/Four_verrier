@@ -55,22 +55,23 @@
 #define DISP_SSR2_FILL_Y     36
 #define DISP_SSR2_FILL_MAX   74   // pixels pour 100% PWM (78-4)
 
-// --- Ligne Prog : "Prog:" statique, nom dynamique ---
+// --- Ligne Prog : "Prog:" statique, nom dynamique, temps total à droite ---
 #define DISP_PROG_ROW_Y      58
 #define DISP_PROG_LABEL_X     5   // "Prog:"
 #define DISP_PROG_NAME_X     52   // nom du programme
-#define DISP_PROG_NAME_W    268   // zone à effacer (52..320)
+#define DISP_PROG_NAME_W    165   // zone à effacer (52..217) — limité pour laisser place au temps total
+#define DISP_PROG_TOTAL_X   222   // temps total écoulé programme (blanc, calé à droite)
+#define DISP_PROG_TOTAL_W    98   // zone à effacer (222..320)
 
-// --- Ligne statut : Etape | [temps étape] | Temps total ---
+// --- Ligne statut : Etape | rampe écoulée (orange) | hold restant (vert) ---
 #define DISP_STATUS_ROW_Y    74
 #define DISP_STEP_LABEL_X     5   // "Etape:"
 #define DISP_STEP_X          52   // numéro étape "x/x"
 #define DISP_STEP_W          36   // zone à effacer ("9/9" + marge)
-#define DISP_STEP_TIME_X     92   // "[H:MM:SS]" temps étape (sans label)
+#define DISP_STEP_TIME_X     92   // temps rampe écoulé (orange, "MM:SS")
 #define DISP_STEP_TIME_W     78   // zone à effacer
-#define DISP_TIME_LABEL_X   174   // "Temps:"
-#define DISP_TIME_X         220   // valeur H:MM:SS total programme
-#define DISP_TIME_W          90   // zone à effacer ("9:59:59")
+#define DISP_HOLD_TIME_X    185   // décompteur HOLD restant (vert, "MM:SS")
+#define DISP_HOLD_TIME_W     95   // zone à effacer (185..280)
 
 // --- Zone graphe / timeline ---
 #define DISP_GRAPH_TOP_Y     92

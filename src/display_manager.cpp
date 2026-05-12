@@ -57,7 +57,7 @@ void drawStaticUI()
     // Étiquettes zone programme
     tft.drawString("Prog:",  DISP_PROG_LABEL_X,  DISP_PROG_ROW_Y,    2);
     tft.drawString("Etape:", DISP_STEP_LABEL_X,  DISP_STATUS_ROW_Y,  2);
-    tft.drawString("Temps:", DISP_TIME_LABEL_X,  DISP_STATUS_ROW_Y,  2);
+    // "Temps:" supprimé : remplacé par couleurs (orange=rampe, vert=hold)
 }
 
 // ---------------------------------------------------------------------------
@@ -150,11 +150,25 @@ void updateDisplay(bool force)
             tft.fillRect(DISP_SSR2_FILL_X, DISP_SSR2_FILL_Y,
                          pwmW, DISP_SSR2_BAR_H - 2, DISP_ORANGE);
 
-        // --- Nom du programme ---
+        // --- Nom du programme (largeur réduite pour laisser place au temps total) ---
         tft.fillRect(DISP_PROG_NAME_X, DISP_PROG_ROW_Y, DISP_PROG_NAME_W, 16, DISP_BLACK);
         tft.setTextColor(programRunning ? DISP_GREEN : DISP_WHITE, DISP_BLACK);
         tft.drawString(programLoaded ? currentProgram.name : "Idle",
                        DISP_PROG_NAME_X, DISP_PROG_ROW_Y, 2);
+
+        // --- Temps total écoulé programme (ligne Prog, droite, blanc) ---
+        tft.fillRect(DISP_PROG_TOTAL_X, DISP_PROG_ROW_Y, DISP_PROG_TOTAL_W, 16, DISP_BLACK);
+        if (programRunning)
+        {
+            tft.setTextColor(DISP_WHITE, DISP_BLACK);
+            unsigned long tot = (millis() - programStartMs) / 1000;
+            if (tot < 3600)
+                snprintf(buf, sizeof(buf), "%lu:%02lu", tot / 60, tot % 60);
+            else
+                snprintf(buf, sizeof(buf), "%lu:%02lu:%02lu",
+                         tot / 3600, (tot % 3600) / 60, tot % 60);
+            tft.drawString(buf, DISP_PROG_TOTAL_X, DISP_PROG_ROW_Y, 2);
+        }
 
         // --- Étape ---
         tft.fillRect(DISP_STEP_X, DISP_STATUS_ROW_Y, DISP_STEP_W, 16, DISP_BLACK);
@@ -166,39 +180,37 @@ void updateDisplay(bool force)
             snprintf(buf, sizeof(buf), "0");
         tft.drawString(buf, DISP_STEP_X, DISP_STATUS_ROW_Y, 2);
 
-        // --- Temps étape [H:MM:SS] ---
+        // --- Temps rampe écoulé (orange, MM:SS, compte en avant) ---
         tft.fillRect(DISP_STEP_TIME_X, DISP_STATUS_ROW_Y, DISP_STEP_TIME_W, 16, DISP_BLACK);
-        tft.setTextColor(DISP_WHITE, DISP_BLACK);
         if (programRunning && programLoaded)
         {
-            unsigned long stepElapsed = (millis() - stepStartMs) / 1000;
-            int sHrs = stepElapsed / 3600;
-            int sMn  = (stepElapsed % 3600) / 60;
-            int sSec = stepElapsed % 60;
-            snprintf(buf, sizeof(buf), "[%d:%02d:%02d]", sHrs, sMn, sSec);
+            tft.setTextColor(DISP_ORANGE, DISP_BLACK);
+            unsigned long rampSec = 0;
+            if (currentPhase == PHASE_RAMP)
+                rampSec = (millis() - phaseStartMs) / 1000;
+            else if (currentPhase == PHASE_HOLD && phaseStartMs > stepStartMs)
+                rampSec = (phaseStartMs - stepStartMs) / 1000;  // durée rampe figée
+            snprintf(buf, sizeof(buf), "%lu:%02lu", rampSec / 60, rampSec % 60);
+            tft.drawString(buf, DISP_STEP_TIME_X, DISP_STATUS_ROW_Y, 2);
         }
-        else
-        {
-            snprintf(buf, sizeof(buf), "[--:--]");
-        }
-        tft.drawString(buf, DISP_STEP_TIME_X, DISP_STATUS_ROW_Y, 2);
 
-        // --- Temps écoulé (format H:MM:SS) ---
-        tft.fillRect(DISP_TIME_X, DISP_STATUS_ROW_Y, DISP_TIME_W, 16, DISP_BLACK);
-        tft.setTextColor(DISP_WHITE, DISP_BLACK);
-        if (programRunning)
+        // --- Décompteur HOLD restant (vert, MM:SS, compte à rebours) ---
+        tft.fillRect(DISP_HOLD_TIME_X, DISP_STATUS_ROW_Y, DISP_HOLD_TIME_W, 16, DISP_BLACK);
+        if (programRunning && programLoaded)
         {
-            unsigned long elapsed = (millis() - programStartMs) / 1000;
-            int hrs = elapsed / 3600;
-            int mn  = (elapsed % 3600) / 60;
-            int sec = elapsed % 60;
-            snprintf(buf, sizeof(buf), "%d:%02d:%02d", hrs, mn, sec);
+            tft.setTextColor(DISP_GREEN, DISP_BLACK);
+            uint8_t si = (currentProgram.currentStep < currentProgram.numSteps)
+                         ? currentProgram.currentStep : currentProgram.numSteps - 1;
+            unsigned long holdTotal = (unsigned long)currentProgram.steps[si].holdTime * 60UL;
+            unsigned long holdRemaining = holdTotal;
+            if (currentPhase == PHASE_HOLD)
+            {
+                unsigned long holdElapsed = (millis() - phaseStartMs) / 1000;
+                holdRemaining = (holdElapsed < holdTotal) ? holdTotal - holdElapsed : 0;
+            }
+            snprintf(buf, sizeof(buf), "%lu:%02lu", holdRemaining / 60, holdRemaining % 60);
+            tft.drawString(buf, DISP_HOLD_TIME_X, DISP_STATUS_ROW_Y, 2);
         }
-        else
-        {
-            snprintf(buf, sizeof(buf), "0:00:00");
-        }
-        tft.drawString(buf, DISP_TIME_X, DISP_STATUS_ROW_Y, 2);
 
         lastTopUpdate = millis();
     }

@@ -24,7 +24,7 @@
 // #define DEBUG_SERIAL   // ← Décommenter uniquement en développement
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "1.6.1r12"
+#define FIRMWARE_VERSION "1.6.1r13"
 #endif
 const char *firmwareVersion = FIRMWARE_VERSION;
 
@@ -255,8 +255,20 @@ void loop()
     // --- Calcul PID ---
     if (millis() - lastPIDCompute >= PID_INTERVAL)
     {
+        static double pidLastInput = 0.0;
+
         if (tempPID.Compute())
         {
+            // Décomposition des termes PID (la lib ne les expose pas)
+            // P = Kp × error
+            // D = −Kd × ΔInput / SampleTime   (SampleTime = 1 s → diviseur = 1)
+            // I = sortie − P − D  (par soustraction, exact hors saturation)
+            double err    = targetTemp - currentTemp;
+            double dInput = currentTemp - pidLastInput;
+            pidPterm = (float)(pidKp * err);
+            pidDterm = (float)(-pidKd * dInput);          // SampleTime = 1 s
+            pidIterm = (float)(pidOutput - pidPterm - pidDterm);
+
             uint16_t pwm       = (uint16_t)constrain((int)round(pidOutput), 0, 1023);
             bool     ssr1On    = programRunning;
             uint16_t ssr2Value = programRunning ? pwm : 0;
@@ -268,6 +280,7 @@ void loop()
 
             ssr2Pwm = ssr2Value;
         }
+        pidLastInput   = currentTemp;
         lastPIDCompute = millis();
     }
 

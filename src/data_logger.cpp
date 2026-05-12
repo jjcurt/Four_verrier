@@ -257,9 +257,7 @@ void logDataPoint()
 
     case LOG_MAINTENANCE:
     {
-        // Approximation des termes PID (valeurs exactes inaccessibles depuis la lib)
         float err = (float)(targetTemp - currentTemp);
-        float pterm = (float)pidKp * err;
 
         unsigned long effectiveHoldSec = (currentPhase == PHASE_HOLD && effectiveHoldStartMs > 0)
                                          ? (millis() - effectiveHoldStartMs) / 1000 : 0;
@@ -273,7 +271,7 @@ void logDataPoint()
                            ",%.2f,%.3f,%.3f,%u,%s,%d,%.2f,%lu,%lu,%lu,%d,%s\n",
                            timestamp, elapsedSec,
                            currentTemp, filteredTemp, rawTemp, targetTemp,
-                           err, pidOutput, pterm, pidIterm, pidDterm,
+                           err, pidOutput, pidPterm, pidIterm, pidDterm,
                            pidKp, pidKi, pidKd, ssr2Pwm,
                            phaseStr, stepNum, rampRate, holdTime,
                            effectiveHoldSec, stabilizingTimeSec,

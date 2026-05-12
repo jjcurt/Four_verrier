@@ -27,6 +27,7 @@ extern unsigned long  phaseStartMs;
 extern unsigned long  stepStartMs;
 extern unsigned long  effectiveHoldStartMs;
 extern float          rampStartTemp;
+extern double         boostStartTemp;
 extern bool           isStabilizing;
 extern unsigned long  stabilizingStartMs;
 extern bool           disablePidReset;
@@ -103,6 +104,9 @@ bool loadProgramFromSD(const String &programName)
     currentProgram.pidKp                = doc["pidKp"]                | 0.0f;
     currentProgram.pidKi                = doc["pidKi"]                | 0.0f;
     currentProgram.pidKd                = doc["pidKd"]                | 0.0f;
+    currentProgram.enableBoost          = doc["enableBoost"]          | false;
+    currentProgram.boostTempRise        = doc["boostTempRise"]        | 5.0f;
+    currentProgram.boostMaxSec          = doc["boostMaxSec"]          | (uint16_t)60;
 
     currentProgram.active      = false;
     currentProgram.currentStep = 0;
@@ -148,6 +152,25 @@ void executeProgramStep()
 
     switch (currentPhase)
     {
+    case PHASE_BOOST:
+    {
+        double rise    = currentTemp - boostStartTemp;
+        unsigned long elapsed = (now - phaseStartMs) / 1000UL;
+        bool tempLifted  = (rise  >= currentProgram.boostTempRise);
+        bool timedOut    = (elapsed >= currentProgram.boostMaxSec);
+
+        if (tempLifted || timedOut)
+        {
+            DEBUG_PRINTF("Boost terminé : ΔT=+%.1f°C en %lus (%s)\n",
+                         rise, elapsed, timedOut ? "timeout" : "décollage");
+            // Reset PID pour repartir proprement sur la rampe
+            tempPID.SetMode(MANUAL);
+            tempPID.SetMode(AUTOMATIC);
+            currentPhase = PHASE_IDLE;
+        }
+        break;
+    }
+
     case PHASE_IDLE:
         if (step.withRamp && step.rampRate > 0)
         {

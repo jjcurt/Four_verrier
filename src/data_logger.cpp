@@ -35,7 +35,7 @@ extern double         currentTemp;
 extern double         targetTemp;
 extern double         rawTemp;
 extern double         pidOutput;
-extern float          filteredTemp;
+extern double         filteredTemp;
 extern float          pidError;
 extern float          pidPterm;
 extern float          pidIterm;

@@ -48,6 +48,7 @@ extern ProgramPhase currentPhase;
 extern unsigned long programStartMs;
 extern unsigned long phaseStartMs;
 extern unsigned long effectiveHoldStartMs;
+extern double        boostStartTemp;
 extern PID tempPID;
 
 // ---------------------------------------------------------------------------
@@ -417,8 +418,20 @@ void setupWebServer()
                 currentProgramName  = program;
                 programStartMs      = millis();
                 currentProgram.currentStep = 0;
-                currentPhase        = PHASE_IDLE;
                 initialBoost        = ((currentProgram.steps[0].targetTemp - currentTemp) > 50.0f);
+
+                if (currentProgram.enableBoost)
+                {
+                    currentPhase   = PHASE_BOOST;
+                    phaseStartMs   = millis();
+                    boostStartTemp = currentTemp;
+                    DEBUG_PRINTF("[BOOST] Démarrage : T=%.1f°C, seuil=+%.1f°C, max=%us\n",
+                                 currentTemp, currentProgram.boostTempRise, currentProgram.boostMaxSec);
+                }
+                else
+                {
+                    currentPhase = PHASE_IDLE;
+                }
 
                 // Override PID si le programme définit ses propres gains
                 snapshotBasePid();

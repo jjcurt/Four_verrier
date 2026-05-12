@@ -24,7 +24,7 @@
 // #define DEBUG_SERIAL   // ← Décommenter uniquement en développement
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "1.6.1r14"
+#define FIRMWARE_VERSION "1.6.1r15"
 #endif
 const char *firmwareVersion = FIRMWARE_VERSION;
 
@@ -85,7 +85,7 @@ double rawTemp      = 0.0;
 double currentTemp  = 0.0;
 double targetTemp   = 0.0;
 double pidOutput    = 0.0;
-float  filteredTemp = 0.0;
+double filteredTemp = 0.0;
 float  tempFilterAlpha = 0.8f;
 
 // PID
@@ -146,8 +146,11 @@ unsigned long stabilizingStartMs   = 0;
 unsigned long effectiveHoldStartMs = 0;
 bool          initialBoost         = false;
 
-// PID controller (doit être déclaré après les doubles qu'il référence)
-PID tempPID(&currentTemp, &pidOutput, &targetTemp, pidKp, pidKi, pidKd, DIRECT);
+// Boost initial
+double boostStartTemp = 0.0;
+
+// PID controller — utilise filteredTemp pour atténuer le bruit de mesure
+PID tempPID(&filteredTemp, &pidOutput, &targetTemp, pidKp, pidKi, pidKd, DIRECT);
 
 // ---------------------------------------------------------------------------
 // setup()
@@ -231,10 +234,10 @@ void loop()
         rawTemp     = thermocouple.readCelsius();
         currentTemp = rawTemp;
 
-        // Filtre EMA
-        filteredTemp = (filteredTemp == 0.0f)
-            ? (float)currentTemp
-            : (tempFilterAlpha * currentTemp + (1.0f - tempFilterAlpha) * filteredTemp);
+        // Filtre EMA (double — utilisé directement par le PID)
+        filteredTemp = (filteredTemp == 0.0)
+            ? currentTemp
+            : (tempFilterAlpha * currentTemp + (1.0 - tempFilterAlpha) * filteredTemp);
 
         lastTempRead = millis();
 
@@ -257,16 +260,28 @@ void loop()
     {
         static double pidLastInput = 0.0;
 
-        if (tempPID.Compute())
+        if (currentPhase == PHASE_BOOST)
+        {
+            // Bypass PID : pleine puissance pendant la phase de boost
+            pidOutput = 1023;
+            pidPterm  = 1023; pidIterm = 0; pidDterm = 0;
+            bool     ssr1On    = programRunning;
+            uint16_t ssr2Value = programRunning ? 1023 : 0;
+            if (ssr1On != lastSsr1State)
+            { lastSsr1State = ssr1On; RelaySerial::setRelay(1, ssr1On); }
+            if (ssr2Value != lastSsr2Pwm)
+            { lastSsr2Pwm = ssr2Value; RelaySerial::setRelayPWM(2, ssr2Value); }
+            ssr2Pwm = ssr2Value;
+        }
+        else if (tempPID.Compute())
         {
             // Décomposition des termes PID (la lib ne les expose pas)
-            // P = Kp × error
-            // D = −Kd × ΔInput / SampleTime   (SampleTime = 1 s → diviseur = 1)
-            // I = sortie − P − D  (par soustraction, exact hors saturation)
-            double err    = targetTemp - currentTemp;
-            double dInput = currentTemp - pidLastInput;
+            // P = Kp × error,  D = −Kd × ΔInput,  I = sortie − P − D
+            // Le PID travaille sur filteredTemp pour atténuer le bruit de mesure.
+            double err    = targetTemp - filteredTemp;
+            double dInput = filteredTemp - pidLastInput;
             pidPterm = (float)(pidKp * err);
-            pidDterm = (float)(-pidKd * dInput);          // SampleTime = 1 s
+            pidDterm = (float)(-pidKd * dInput);
             pidIterm = (float)(pidOutput - pidPterm - pidDterm);
 
             uint16_t pwm       = (uint16_t)constrain((int)round(pidOutput), 0, 1023);
@@ -280,7 +295,7 @@ void loop()
 
             ssr2Pwm = ssr2Value;
         }
-        pidLastInput   = currentTemp;
+        pidLastInput   = filteredTemp;
         lastPIDCompute = millis();
     }
 

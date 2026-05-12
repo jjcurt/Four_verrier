@@ -522,6 +522,26 @@
                             </div>
                         </div>
 
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enableBoost" onchange="toggleBoost()">
+                                Phase de boost au démarrage
+                            </label>
+                            <div class="help-text">Pleine puissance avant la rampe, jusqu'au décollage thermique. Réduit le dead time initial du four.</div>
+                        </div>
+                        <div id="boostParams" style="display: none; padding-left: 20px;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="boostTempRise">Seuil de décollage (°C)</label>
+                                    <input type="number" id="boostTempRise" step="0.5" min="1" max="30" value="5">
+                                </div>
+                                <div class="form-group">
+                                    <label for="boostMaxSec">Durée max (s)</label>
+                                    <input type="number" id="boostMaxSec" step="5" min="10" max="120" value="60">
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="adaptiveParams" style="display: none; padding-left: 20px;">
                             <div class="form-row">
                                 <div class="form-group">
@@ -624,6 +644,11 @@
             document.getElementById('pidOverrideParams').style.display = enabled ? 'block' : 'none';
         }
 
+        function toggleBoost() {
+            const enabled = document.getElementById('enableBoost').checked;
+            document.getElementById('boostParams').style.display = enabled ? 'block' : 'none';
+        }
+
         // Toggle adaptive logging parameters
         document.getElementById('adaptiveLogging').addEventListener('change', function() {
             const adaptiveParams = document.getElementById('adaptiveParams');
@@ -724,6 +749,15 @@
             // PID reset control (v1.6.1)
             if (document.getElementById('disablePidReset').checked) {
                 program.disablePidReset = true;
+            }
+
+            // Boost initial (optionnel)
+            if (document.getElementById('enableBoost').checked) {
+                program.enableBoost = true;
+                const rise = parseFloat(document.getElementById('boostTempRise').value);
+                const maxS = parseInt(document.getElementById('boostMaxSec').value);
+                if (!isNaN(rise) && rise > 0) program.boostTempRise = rise;
+                if (!isNaN(maxS) && maxS > 0) program.boostMaxSec  = maxS;
             }
 
             // PID override par programme (optionnel)

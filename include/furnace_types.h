@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-enum ProgramPhase { PHASE_IDLE, PHASE_RAMP, PHASE_HOLD };
+enum ProgramPhase { PHASE_IDLE, PHASE_BOOST, PHASE_RAMP, PHASE_HOLD };
 
 struct ProgramStep
 {
@@ -36,6 +36,10 @@ struct FiringProgram
     float pidKp;  // 0.0 = pas d'override (utilise settings.json)
     float pidKi;
     float pidKd;
+
+    bool     enableBoost;    // pleine puissance avant de démarrer la rampe
+    float    boostTempRise;  // °C de montée pour quitter le boost (défaut: 5.0)
+    uint16_t boostMaxSec;    // durée max de sécurité en secondes (défaut: 60)
 };
 
 struct FurnaceState

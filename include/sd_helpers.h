@@ -89,9 +89,10 @@ inline bool sdIsAllowedPath(const String &path)
         return false;
 
     // Seuls ces répertoires sont accessibles depuis le web
-    return path.startsWith(SD_LOGS_DIR) ||
+    return path.startsWith(SD_LOGS_DIR)     ||
            path.startsWith(SD_PROGRAMS_DIR) ||
-           path.startsWith(SD_UPDATES_DIR);
+           path.startsWith(SD_UPDATES_DIR)  ||
+           path.startsWith(SD_CONFIG_DIR);
 }
 
 // Vérifie l'existence d'un fichier sur la SD card.

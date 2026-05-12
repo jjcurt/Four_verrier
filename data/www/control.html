@@ -2019,17 +2019,27 @@
             }).catch(()=>{/* ignore if not available */});
 
         // Fetch available programs
-        function loadPrograms() {
+        function loadPrograms(retry = true) {
             fetch('/programs')
                 .then(response => response.json())
-                .then(programs => {
+                .then(files => {
+                    const programs = files.filter(f => f.toLowerCase().endsWith('.json'));
                     const select = document.getElementById('programSelect');
+                    // Vider les options existantes sauf la première (placeholder)
+                    while (select.options.length > 1) select.remove(1);
                     programs.forEach(prog => {
                         const option = document.createElement('option');
                         option.value = prog;
-                        option.textContent = prog;
+                        option.textContent = prog.replace(/\.json$/i, '');
                         select.appendChild(option);
                     });
+                    // Réessayer une fois si vide (SD pas encore prête au démarrage)
+                    if (programs.length === 0 && retry) {
+                        setTimeout(() => loadPrograms(false), 2000);
+                    }
+                })
+                .catch(() => {
+                    if (retry) setTimeout(() => loadPrograms(false), 2000);
                 });
         }
 

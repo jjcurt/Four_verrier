@@ -811,7 +811,7 @@
 
             list.innerHTML = programs.map(name => `
                 <li class="program-item">
-                    <span class="program-name">${escapeHtml(name)}</span>
+                    <span class="program-name">${escapeHtml(name.replace(/\.json$/i, ''))}</span>
                     <div class="program-actions">
                         <button class="button" onclick="viewProgram('${escapeHtml(name)}')">👁️ Voir</button>
                         <a class="button" href="/download?path=/programs/${encodeURIComponent(name)}" download>⬇️ Télécharger</a>

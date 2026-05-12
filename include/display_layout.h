@@ -87,13 +87,17 @@
 #define DISP_TIMELINE_PAD_Y  10
 #define DISP_TIMELINE_STEP_GAP  6
 
-// --- Palette corrigée pour panel CYD (ESP32-2432S028R) ---
-// Ce panel a un swap R↔B physique avec TFT_RGB_ORDER=1 (seul mode sans inversion).
-// Chaque alias envoie la couleur R↔B-inversée pour que l'affichage soit correct.
-// Couleurs symétriques (TFT_BLACK, WHITE, GREEN, DARKGREY) : inchangées.
-#define DISP_YELLOW  TFT_CYAN     // envoyer 0x07FF → affiche jaune (255,255,0)
-#define DISP_CYAN    TFT_YELLOW   // envoyer 0xFFE0 → affiche cyan  (0,255,255)
-#define DISP_RED     TFT_BLUE     // envoyer 0x001F → affiche rouge (255,0,0)
-#define DISP_BLUE    TFT_RED      // envoyer 0xF800 → affiche bleu  (0,0,255)
-#define DISP_ORANGE  0x05BF       // envoyer (R=0,G=45,B=31) → affiche orange (255,180,0)
-#define DISP_VIOLET  0xE152       // envoyer (R=28,G=10,B=18) → affiche violet (180,46,226)
+// --- Palette corrigée pour panel CYD ESP32-2432S028R ---
+// Transform hardware : invert(bits) composé avec swap(R,B)
+// Pour afficher couleur C, envoyer T(C) = invert(swap_RB(C))  [T est son propre inverse]
+// Toutes les couleurs sont affectées — y compris BLACK, WHITE, GREEN.
+#define DISP_BLACK    0xFFFF  // T(0x0000) → affiche noir
+#define DISP_WHITE    0x0000  // T(0xFFFF) → affiche blanc
+#define DISP_DARKGREY 0x8410  // T(0x7BEF) → affiche gris sombre
+#define DISP_GREEN    0xF81F  // T(0x07E0) → affiche vert
+#define DISP_YELLOW   0xF800  // T(0xFFE0) → affiche jaune
+#define DISP_CYAN     0x001F  // T(0x07FF) → affiche cyan
+#define DISP_RED      0xFFE0  // T(0xF800) → affiche rouge
+#define DISP_BLUE     0x07FF  // T(0x001F) → affiche bleu
+#define DISP_ORANGE   0xFA40  // T(0xFDA0) → affiche orange
+#define DISP_VIOLET   0x1EAD  // T(0x915C) → affiche violet

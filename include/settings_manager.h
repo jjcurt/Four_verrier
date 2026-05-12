@@ -24,3 +24,7 @@ bool saveSettings();
 // Applique les valeurs d'un document JSON aux variables globales.
 // N'écrit rien sur la SD — appeler saveSettings() ensuite si nécessaire.
 void applySettingsFromJson(const JsonDocument &doc);
+
+// Sauvegarde/restaure les gains PID de base (settings.json) autour d'un override programme.
+void snapshotBasePid();
+void restoreBasePid();

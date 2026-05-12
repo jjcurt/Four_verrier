@@ -32,6 +32,10 @@ struct FiringProgram
     uint16_t manualPWM;
 
     bool disablePidReset;
+
+    float pidKp;  // 0.0 = pas d'override (utilise settings.json)
+    float pidKi;
+    float pidKd;
 };
 
 struct FurnaceState

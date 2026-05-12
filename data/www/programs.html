@@ -497,7 +497,31 @@
                             </label>
                             <div class="help-text">⚠️ Expérimental (v1.6.1) : Maintient l'intégrale PID lors des transitions (meilleure continuité, risque de dépassement)</div>
                         </div>
-                        
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enablePidOverride" onchange="togglePidOverride()">
+                                Gains PID spécifiques à ce programme
+                            </label>
+                            <div class="help-text">Surcharge les gains de settings.json pendant l'exécution. Utile si la charge du four modifie le comportement thermique.</div>
+                        </div>
+                        <div id="pidOverrideParams" style="display: none; padding-left: 20px;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="progPidKp">Kp</label>
+                                    <input type="number" id="progPidKp" step="0.1" min="0" placeholder="ex: 40.0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="progPidKi">Ki</label>
+                                    <input type="number" id="progPidKi" step="0.01" min="0" placeholder="ex: 0.1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="progPidKd">Kd</label>
+                                    <input type="number" id="progPidKd" step="0.1" min="0" placeholder="ex: 4.0">
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="adaptiveParams" style="display: none; padding-left: 20px;">
                             <div class="form-row">
                                 <div class="form-group">
@@ -593,6 +617,11 @@
             const manualMode = document.getElementById('manualMode').checked;
             const manualPWMGroup = document.getElementById('manualPWMGroup');
             manualPWMGroup.style.display = manualMode ? 'block' : 'none';
+        }
+
+        function togglePidOverride() {
+            const enabled = document.getElementById('enablePidOverride').checked;
+            document.getElementById('pidOverrideParams').style.display = enabled ? 'block' : 'none';
         }
 
         // Toggle adaptive logging parameters
@@ -697,6 +726,16 @@
                 program.disablePidReset = true;
             }
 
+            // PID override par programme (optionnel)
+            if (document.getElementById('enablePidOverride').checked) {
+                const kp = parseFloat(document.getElementById('progPidKp').value);
+                const ki = parseFloat(document.getElementById('progPidKi').value);
+                const kd = parseFloat(document.getElementById('progPidKd').value);
+                if (!isNaN(kp) && kp > 0) program.pidKp = kp;
+                if (!isNaN(ki) && ki > 0) program.pidKi = ki;
+                if (!isNaN(kd) && kd > 0) program.pidKd = kd;
+            }
+
             // Collect steps - add as array at the end
             const stepsArray = [];
             const stepsContainer = document.getElementById('stepsContainer');
@@ -750,8 +789,7 @@
                     return;
                 }
                 
-                // Convert program to compact JSON string (no formatting)
-                const jsonContent = JSON.stringify(program);
+                const jsonContent = JSON.stringify(program, null, 2);
                 
                 // Send to backend
                 const res = await fetch('/api/save_program', {
@@ -947,6 +985,6 @@
         }
     </script>
     
-    <div class="build-footer">Build: v1.6.1r6 - 2026-05-12 14:26</div>
+    <div class="build-footer">Build: v1.6.1r7 - 2026-05-12 14:44</div>
 </body>
 </html>

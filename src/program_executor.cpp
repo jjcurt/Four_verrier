@@ -5,6 +5,7 @@
 #include "program_executor.h"
 #include "furnace_types.h"
 #include "data_logger.h"
+#include "settings_manager.h"
 #include "debug.h"
 #include "config.h"
 #include <SD.h>
@@ -99,6 +100,9 @@ bool loadProgramFromSD(const String &programName)
     currentProgram.manualMode           = doc["manualMode"]           | false;
     currentProgram.manualPWM            = doc["manualPWM"]            | 0;
     currentProgram.disablePidReset      = doc["disablePidReset"]      | disablePidReset;
+    currentProgram.pidKp                = doc["pidKp"]                | 0.0f;
+    currentProgram.pidKi                = doc["pidKi"]                | 0.0f;
+    currentProgram.pidKd                = doc["pidKd"]                | 0.0f;
 
     currentProgram.active      = false;
     currentProgram.currentStep = 0;
@@ -134,6 +138,7 @@ void executeProgramStep()
         currentProgramName = "Idle";
         targetTemp         = 0;
         currentPhase       = PHASE_IDLE;
+        restoreBasePid();
         stopDataLog();
         DEBUG_PRINTLN("Program completed");
         return;

@@ -420,6 +420,17 @@ void setupWebServer()
                 currentPhase        = PHASE_IDLE;
                 initialBoost        = ((currentProgram.steps[0].targetTemp - currentTemp) > 50.0f);
 
+                // Override PID si le programme définit ses propres gains
+                snapshotBasePid();
+                if (currentProgram.pidKp != 0.0f || currentProgram.pidKi != 0.0f || currentProgram.pidKd != 0.0f)
+                {
+                    if (currentProgram.pidKp != 0.0f) pidKp = currentProgram.pidKp;
+                    if (currentProgram.pidKi != 0.0f) pidKi = currentProgram.pidKi;
+                    if (currentProgram.pidKd != 0.0f) pidKd = currentProgram.pidKd;
+                    tempPID.SetTunings(pidKp, pidKi, pidKd);
+                    DEBUG_PRINTF("[PID] Override programme: Kp=%.2f Ki=%.3f Kd=%.2f\n", pidKp, pidKi, pidKd);
+                }
+
                 if (currentProgram.enableDataLog || currentProgram.enableTestLog || currentProgram.enableMaintenanceLog)
                 {
                     startDataLog(program);
@@ -440,6 +451,7 @@ void setupWebServer()
         currentProgramName = "Idle";
         targetTemp         = 0;
         currentPhase       = PHASE_IDLE;
+        restoreBasePid();
         stopDataLog();
         DEBUG_PRINTLN("Program stopped");
         r->send(200, "text/plain", "Program stopped");

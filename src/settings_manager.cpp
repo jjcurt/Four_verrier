@@ -42,6 +42,11 @@ extern PID            tempPID;
 
 static const char *SETTINGS_PATH = "/config/settings.json";
 
+// Valeurs PID de base sauvegardées avant un éventuel override programme
+static double basePidKp = 0.0;
+static double basePidKi = 0.0;
+static double basePidKd = 0.0;
+
 // ---------------------------------------------------------------------------
 // applySettingsFromJson — Applique un document JSON aux variables globales
 // (sans I/O SD — utile lors d'une mise à jour via WebSocket)
@@ -174,4 +179,29 @@ bool saveSettings()
 
     DEBUG_PRINTLN("Settings saved");
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// snapshotBasePid — Mémorise Kp/Ki/Kd courants avant un override programme
+// ---------------------------------------------------------------------------
+void snapshotBasePid()
+{
+    basePidKp = pidKp;
+    basePidKi = pidKi;
+    basePidKd = pidKd;
+    DEBUG_PRINTF("[PID] Base snapshot: Kp=%.2f Ki=%.3f Kd=%.2f\n", basePidKp, basePidKi, basePidKd);
+}
+
+// ---------------------------------------------------------------------------
+// restoreBasePid — Restaure Kp/Ki/Kd mémorisés (après fin de programme)
+// ---------------------------------------------------------------------------
+void restoreBasePid()
+{
+    if (basePidKp == 0.0 && basePidKi == 0.0 && basePidKd == 0.0)
+        return; // pas de snapshot valide
+    pidKp = basePidKp;
+    pidKi = basePidKi;
+    pidKd = basePidKd;
+    tempPID.SetTunings(pidKp, pidKi, pidKd);
+    DEBUG_PRINTF("[PID] Restored base: Kp=%.2f Ki=%.3f Kd=%.2f\n", pidKp, pidKi, pidKd);
 }

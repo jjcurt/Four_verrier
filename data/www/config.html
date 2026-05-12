@@ -366,7 +366,8 @@
 
         // Load current configuration on page load
         window.onload = function() {
-            loadCurrentConfig();
+            loadDefaults(true);   // préremplir avec les défauts avant le fetch (évite les NaN)
+            loadCurrentConfig();  // puis écraser avec les valeurs sauvegardées
         };
 
         // Load current WiFi and PID configuration
@@ -446,37 +447,37 @@
         }
 
         // Load v7/v1.4.7 validated defaults
-        function loadDefaults() {
+        function loadDefaults(silent = false) {
             // PID defaults
             document.getElementById('pidKp').value = 12.0;
             document.getElementById('pidKi').value = 0.05;
             document.getElementById('pidKd').value = 50.0;
-            
+
             // STABILIZING defaults
             document.getElementById('stabilizingTimeoutMinutes').value = 20.0;
             document.getElementById('stabilizingToleranceStrict').value = 2.0;
             document.getElementById('stabilizingToleranceWarning').value = 5.0;
             document.getElementById('stabilizingToleranceCritical').value = 50.0;
             document.getElementById('stabilizingStableDurationMs').value = 30000;
-            
+
             // Timeline estimation defaults (v1.4.9 - measured from TestProd2)
             document.getElementById('estimatedHeatingRate').value = 39.0;
             document.getElementById('estimatedCoolingRate').value = 21.0;
             document.getElementById('estimatedStabilizationTime').value = 3.0;
-            
+
             // HOLD phase defaults (v1.4.7)
             document.getElementById('cookingZoneMargin').value = 20.0;
-            
+
             // Graph update interval defaults (v1.5.11)
             document.getElementById('idleGraphUpdateInterval').value = 5000;
-            
+
             // PID reset control defaults (v1.6.1)
             document.getElementById('disablePidReset').checked = false;
-            
+
             // Temperature filter alpha defaults (v1.6.1)
             document.getElementById('tempFilterAlpha').value = 0.8;
-            
-            showStatus('pidStatus', 'Valeurs v1.4.9 chargées (non enregistrées)', 'success');
+
+            if (!silent) showStatus('pidStatus', 'Valeurs v1.4.9 chargées (non enregistrées)', 'success');
         }
 
         // Handle WiFi form submission
@@ -660,6 +661,6 @@
             }
         }
     </script>
-    <div class="build-footer">Build: v1.6.1r6 - 2026-05-12 14:26</div>
+    <div class="build-footer">Build: v1.6.1r7 - 2026-05-12 14:44</div>
 </body>
 </html>

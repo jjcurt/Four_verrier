@@ -101,3 +101,4 @@
 #define DISP_BLUE     0x07FF  // T(0x001F) → affiche bleu
 #define DISP_ORANGE   0xFA40  // T(0xFDA0) → affiche orange
 #define DISP_VIOLET   0x1EAD  // T(0x915C) → affiche violet
+#define DISP_MAGENTA  0x9E6C  // T(0x998C) → affiche rgb(153,51,102) — descente contrôlée

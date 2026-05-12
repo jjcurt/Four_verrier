@@ -83,10 +83,21 @@ void updateDisplay(bool force)
         char buf[16];
 
         // --- Température four (valeur colorée selon état) ---
+        // Refroidissement naturel : gradient chaud→froid selon température réelle.
+        // Descente contrôlée (rampe descendante en programme) : magenta chaud.
+        auto coolingColor = [](float t) -> uint16_t {
+            if (t > 150.0f) return DISP_RED;
+            if (t > 100.0f) return DISP_ORANGE;
+            if (t >  60.0f) return DISP_YELLOW;
+            if (t >  40.0f) return DISP_GREEN;
+            return DISP_CYAN;
+        };
+
         uint16_t tempColor;
         if (!programRunning)
         {
-            tempColor = (currentTemp > 50.0) ? DISP_VIOLET : DISP_WHITE;
+            // Refroidissement naturel post-programme
+            tempColor = (currentTemp > 40.0f) ? coolingColor(currentTemp) : DISP_WHITE;
         }
         else
         {
@@ -94,7 +105,7 @@ void updateDisplay(bool force)
             {
             case PHASE_RAMP:
                 tempColor = (currentProgram.steps[currentProgram.currentStep].targetTemp
-                             < rampStartTemp) ? DISP_VIOLET : DISP_ORANGE;
+                             < rampStartTemp) ? DISP_MAGENTA : DISP_ORANGE;
                 break;
             case PHASE_HOLD:
                 if      (currentTemp < targetTemp - stabilizingToleranceStrict) tempColor = DISP_CYAN;

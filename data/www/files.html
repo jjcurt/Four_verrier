@@ -67,24 +67,32 @@
 
   <div class="section">
     <h3>🔧 Mise à jour Firmware (OTA)</h3>
-    
+
     <!-- Status indicator for pending SD update -->
     <div id="sdUpdateStatus"></div>
-    
+
     <form id="uploadFirmwareForm" style="margin-bottom:15px">
       <input type="file" id="firmwareFileInput" name="file" accept=".bin" required>
-      <button type="submit">📤 Téléverser Firmware (.bin)</button>
+      <button type="submit" id="uploadFirmwareBtn">📤 Téléverser Firmware (.bin)</button>
       <div class="upload-hint">⚠️ Le fichier sera automatiquement renommé en <strong>firmware.bin</strong> dans /updates/</div>
     </form>
-    
+    <div id="uploadProgress" style="display:none;margin-bottom:10px">
+      <div style="background:#e0e0e0;border-radius:4px;height:12px;overflow:hidden">
+        <div id="uploadProgressBar" style="height:100%;width:0%;background:#2196F3;transition:width 0.2s"></div>
+      </div>
+      <div id="uploadProgressText" style="font-size:0.85em;color:#555;margin-top:4px">0%</div>
+    </div>
+    <div id="uploadResult" style="margin-bottom:10px"></div>
+
     <hr style="margin:20px 0;border:none;border-top:1px solid #ddd">
-    
+
     <div id="firmwareStatus" style="margin-bottom:15px"></div>
-    
+
     <div style="margin-top:10px">
       <button id="applyOta" style="background:#FF9800">⚡ Appliquer OTA Immédiat</button>
       <button id="applySdUpdate" style="background:#4CAF50">💾 Appliquer au Redémarrage (SD)</button>
     </div>
+    <div id="otaResult" style="margin-top:10px"></div>
     <div class="upload-hint" style="margin-top:8px">
       <strong>⚡ OTA Immédiat:</strong> Applique la mise à jour via WiFi maintenant (risque si signal faible)<br>
       <strong>💾 Via SD:</strong> Applique au prochain boot depuis carte SD (plus sûr, recommandé)<br>
@@ -222,46 +230,105 @@
     };
 
     // Upload firmware to /updates/ (always renamed to firmware.bin)
-    document.getElementById('uploadFirmwareForm').onsubmit=async (e)=>{
+    document.getElementById('uploadFirmwareForm').onsubmit=(e)=>{
       e.preventDefault();
       const f=document.getElementById('firmwareFileInput').files[0];
-      if(!f) return alert('Sélectionnez un fichier firmware (.bin)');
+      if(!f) return;
       if(!f.name.endsWith('.bin')){
-        alert('Le fichier doit avoir l\'extension .bin');
+        showResult('uploadResult','error','Le fichier doit avoir l\'extension .bin');
         return;
       }
-      
-      // Always rename to firmware.bin
+
       const fd=new FormData();
       fd.append('file', f, 'firmware.bin');
-      
-      alert('Téléversement du firmware en cours... Cela peut prendre quelques secondes.');
-      const res=await fetch('/upload_to?dest=/updates', {method:'POST', body:fd});
-      if(res.ok){ 
-        alert('Firmware téléversé avec succès dans /updates/firmware.bin!'); 
-        document.getElementById('firmwareFileInput').value='';
-        listOtaCandidates();
-      } else {
-        alert('Échec du téléversement du firmware');
-      }
+
+      const btn=document.getElementById('uploadFirmwareBtn');
+      const progressWrap=document.getElementById('uploadProgress');
+      const progressBar=document.getElementById('uploadProgressBar');
+      const progressText=document.getElementById('uploadProgressText');
+      const resultDiv=document.getElementById('uploadResult');
+
+      btn.disabled=true;
+      progressWrap.style.display='block';
+      progressBar.style.width='0%';
+      progressText.textContent='0%';
+      resultDiv.innerHTML='';
+
+      const xhr=new XMLHttpRequest();
+      xhr.upload.addEventListener('progress',(ev)=>{
+        if(ev.lengthComputable){
+          const pct=Math.round(ev.loaded/ev.total*100);
+          progressBar.style.width=pct+'%';
+          progressText.textContent=pct+'% — '+(ev.loaded>>10)+' / '+(ev.total>>10)+' Ko';
+        }
+      });
+      xhr.addEventListener('load',()=>{
+        btn.disabled=false;
+        progressWrap.style.display='none';
+        if(xhr.status>=200 && xhr.status<300){
+          showResult('uploadResult','success','Firmware téléversé dans /updates/firmware.bin');
+          document.getElementById('firmwareFileInput').value='';
+          listOtaCandidates();
+        } else {
+          showResult('uploadResult','error','Échec du téléversement ('+xhr.status+')');
+        }
+      });
+      xhr.addEventListener('error',()=>{
+        btn.disabled=false;
+        progressWrap.style.display='none';
+        showResult('uploadResult','error','Erreur réseau pendant le téléversement');
+      });
+      xhr.open('POST','/upload_to?dest=/updates');
+      xhr.send(fd);
     };
 
     // Apply OTA update (immediate via WiFi)
     document.getElementById('applyOta').onclick=async ()=>{
       if(!confirm('⚡ MISE À JOUR OTA IMMÉDIATE via WiFi\n\nFichier: firmware.bin\n\n⚠️ RISQUES:\n- Échec si signal WiFi faible\n- ESP32 peut devenir inaccessible si erreur réseau\n\n✅ RECOMMANDÉ: Utiliser "Appliquer au Redémarrage (SD)" à la place\n\nContinuer quand même avec OTA immédiat?')) return;
-      const res=await fetch('/apply_ota', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:'/updates/firmware.bin'})});
-      const txt=await res.text();
-      alert(txt);
-    }
+      showResult('otaResult','info','⏳ Application OTA en cours…');
+      try {
+        const res=await fetch('/apply_ota',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:'/updates/firmware.bin'})});
+        const txt=await res.text();
+        showResult('otaResult','success',txt+' — L\'ESP32 redémarre…');
+        pollReconnect();
+      } catch(err){
+        showResult('otaResult','error','Connexion perdue (l\'ESP32 redémarre peut-être) — rechargez dans 30 s');
+        pollReconnect();
+      }
+    };
 
     // Apply SD update (scheduled for next boot - safer method)
     document.getElementById('applySdUpdate').onclick=async ()=>{
       if(!confirm('💾 MISE À JOUR VIA CARTE SD\n\nFichier: firmware.bin\n\n✅ AVANTAGES:\n- Appliquée au prochain boot (pas de risque WiFi)\n- Retry automatique si échec\n- Plus sûr que OTA WiFi\n\nL\'ESP32 va redémarrer maintenant et appliquer la mise à jour.\n\nContinuer?')) return;
-      
-      alert('Création du marqueur .pending et redémarrage...');
-      const res=await fetch('/apply_sd_update', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})});
-      const txt=await res.text();
-      alert(txt + '\n\nL\'ESP32 redémarre. Patientez 30 secondes puis rechargez cette page.');
+      showResult('otaResult','info','⏳ Marqueur .pending créé, redémarrage…');
+      try {
+        const res=await fetch('/apply_sd_update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+        const txt=await res.text();
+        showResult('otaResult','success',txt+' — Patientez pendant le redémarrage…');
+      } catch(err){
+        showResult('otaResult','info','L\'ESP32 redémarre — reconnexion en cours…');
+      }
+      pollReconnect();
+    };
+
+    function showResult(divId,type,msg){
+      const cls={success:'success',error:'warning',info:'info'}[type]||'info';
+      document.getElementById(divId).innerHTML='<div class="status-box '+cls+'">'+msg+'</div>';
+    }
+
+    function pollReconnect(){
+      const div=document.getElementById('otaResult');
+      let attempts=0;
+      const timer=setInterval(async ()=>{
+        attempts++;
+        try {
+          const r=await fetch('/api/status',{signal:AbortSignal.timeout(3000)});
+          if(r.ok){ clearInterval(timer); location.reload(); }
+        } catch(e){
+          div.innerHTML='<div class="status-box info">⏳ Reconnexion… ('+attempts+'s)</div>';
+        }
+        if(attempts>60){ clearInterval(timer); showResult('otaResult','error','Reconnexion échouée — rechargez manuellement'); }
+      },2000);
     }
 
     function loadAll(){

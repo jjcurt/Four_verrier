@@ -89,8 +89,8 @@ if [ -z "$CURRENT_VERSION" ]; then
     exit 1
 fi
 
-# Nettoyer la version (enlever suffixes -maj, -dev, etc.)
-CLEAN_VERSION=$(echo "$CURRENT_VERSION" | sed 's/-[a-z]*$//')
+# Nettoyer la version (enlever suffixes rN, -dev, -maj, etc.)
+CLEAN_VERSION=$(echo "$CURRENT_VERSION" | sed 's/r[0-9]*$//;s/-[a-zA-Z]*$//')
 print_success "Version actuelle: $CURRENT_VERSION (base: $CLEAN_VERSION)"
 
 # Déterminer la nouvelle version
@@ -239,6 +239,8 @@ for html_file in "${HTML_FILES[@]}"; do
     [ -f "$html_file" ] && git add "$html_file"
 done
 # Note : binaires/ est dans .gitignore — les binaires sont distribués via GitHub Releases
+# FOUR_RELEASE=1 empêche le pre-commit hook d'incrémenter le rN (version déjà fixée par release.sh)
+export FOUR_RELEASE=1
 git commit -m "Release v$NEW_VERSION
 
 $(echo -e "$CHANGELOG_ENTRIES")

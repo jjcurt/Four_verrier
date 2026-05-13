@@ -90,6 +90,7 @@ String buildStatusJson()
     const char *phaseStr = (currentPhase == PHASE_RAMP && isStabilizing) ? "STABILIZING"
                          : (currentPhase == PHASE_RAMP)                  ? "RAMP"
                          : (currentPhase == PHASE_HOLD)                  ? "HOLD"
+                         : (currentPhase == PHASE_BOOST)                 ? "BOOST"
                          : "IDLE";
     doc["phase"] = phaseStr;
 

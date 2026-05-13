@@ -234,9 +234,10 @@ void logDataPoint()
     char timestamp[32];
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &timeinfo);
 
-    const char *phaseStr = (currentPhase == PHASE_RAMP) ? "RAMP"
-                         : (currentPhase == PHASE_HOLD) ? "HOLD"
-                                                        : "IDLE";
+    const char *phaseStr = (currentPhase == PHASE_RAMP)  ? "RAMP"
+                         : (currentPhase == PHASE_HOLD)  ? "HOLD"
+                         : (currentPhase == PHASE_BOOST) ? "BOOST"
+                                                         : "IDLE";
     int stepNum = programLoaded ? (currentProgram.currentStep + 1) : 0;
 
     switch (currentLogType)

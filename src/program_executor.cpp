@@ -28,6 +28,7 @@ extern unsigned long  stepStartMs;
 extern unsigned long  effectiveHoldStartMs;
 extern float          rampStartTemp;
 extern double         boostStartTemp;
+extern double         pidOutput;
 extern bool           isStabilizing;
 extern unsigned long  stabilizingStartMs;
 extern bool           disablePidReset;
@@ -163,8 +164,11 @@ void executeProgramStep()
         {
             DEBUG_PRINTF("Boost terminé : ΔT=+%.1f°C en %lus (%s)\n",
                          rise, elapsed, timedOut ? "timeout" : "décollage");
-            // Reset PID pour repartir proprement sur la rampe
+            // Reset PID propre : forcer pidOutput=0 avant SetMode(AUTOMATIC)
+            // pour éviter que le bumpless transfer initialise l'intégrale à 1023
+            // (valeur de boost), ce qui causerait un dépassement massif en rampe.
             tempPID.SetMode(MANUAL);
+            pidOutput = 0.0;
             tempPID.SetMode(AUTOMATIC);
             currentPhase = PHASE_IDLE;
         }

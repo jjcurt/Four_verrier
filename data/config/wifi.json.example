@@ -1,4 +1,8 @@
 {
   "ssid": "YourNetworkName",
-  "password": "YourPassword"
+  "password": "YourPassword",
+  "staticIp": "192.168.0.100",
+  "gateway": "192.168.0.254",
+  "subnet": "255.255.255.0",
+  "dns": "192.168.0.254"
 }

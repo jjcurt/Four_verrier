@@ -14,36 +14,38 @@
 
 // Firmware version (injectée par PlatformIO via build_flags si disponible)
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "1.6.1r19"
+#define FIRMWARE_VERSION "1.6.1r21"
 #endif
 
 // --- Serveur web ---
 #define HTTP_PORT 80
 
 // --- Paramètres de contrôle de température ---
-#define MAX_TEMP           1000  // Température maximale autorisée (°C)
-#define MIN_TEMP           0     // Température minimale de lecture (°C)
-#define TEMP_READ_INTERVAL 1000  // Intervalle de lecture de la sonde (ms)
-#define PID_INTERVAL       1000  // Intervalle de calcul PID (ms)
+#define MAX_TEMP 1000           // Température maximale autorisée (°C)
+#define MIN_TEMP 0              // Température minimale de lecture (°C)
+#define TEMP_READ_INTERVAL 1000 // Intervalle de lecture de la sonde (ms)
+#define PID_INTERVAL 1000       // Intervalle de calcul PID (ms)
 
 // --- Répertoires SD card ---
 #define SD_PROGRAMS_DIR "/programs"
-#define SD_LOGS_DIR     "/logs"
-#define SD_WEB_DIR      "/www"
-#define SD_CONFIG_DIR   "/config"
-#define SD_UPDATES_DIR  "/updates"
+#define SD_LOGS_DIR "/logs"
+#define SD_WEB_DIR "/www"
+#define SD_CONFIG_DIR "/config"
+#define SD_UPDATES_DIR "/updates"
 
 // --- Affichage ---
-#define SCREEN_WIDTH      320
-#define SCREEN_HEIGHT     240
-#define FONT_SIZE_SMALL   2
-#define FONT_SIZE_LARGE   4
+#define SCREEN_WIDTH 320
+#define SCREEN_HEIGHT 240
+#define FONT_SIZE_SMALL 2
+#define FONT_SIZE_LARGE 4
 
 // --- Graphe température ---
-#define GRAPH_W 300  // Nombre d'échantillons dans le buffer circulaire
-#define GRAPH_H 60   // Hauteur en pixels (référence, zone affichage = 125px)
+#define GRAPH_W 300 // Nombre d'échantillons dans le buffer circulaire
+#define GRAPH_H 60  // Hauteur en pixels (référence, zone affichage = 125px)
 
 // --- Logging adaptatif ---
-#define DEFAULT_LOG_INTERVAL     5000  // ms entre deux points de log
-#define ADAPTIVE_TEMP_DELTA      0.5f  // °C minimum de variation pour logguer
-#define ADAPTIVE_PWM_DELTA       51    // ~5% de 1023
+#define DEFAULT_LOG_INTERVAL 5000 // ms entre deux points de log
+#define ADAPTIVE_TEMP_DELTA 0.5f  // °C minimum de variation pour logguer
+#define ADAPTIVE_PWM_DELTA 51     // ~5% de 1023
+
+//

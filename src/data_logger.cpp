@@ -234,7 +234,8 @@ void logDataPoint()
     char timestamp[32];
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &timeinfo);
 
-    const char *phaseStr = (currentPhase == PHASE_RAMP)  ? "RAMP"
+    const char *phaseStr = (isStabilizing && (currentPhase == PHASE_RAMP || currentPhase == PHASE_HOLD)) ? "STABILIZING"
+                         : (currentPhase == PHASE_RAMP)  ? "RAMP"
                          : (currentPhase == PHASE_HOLD)  ? "HOLD"
                          : (currentPhase == PHASE_BOOST) ? "BOOST"
                                                          : "IDLE";

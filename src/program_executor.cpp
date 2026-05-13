@@ -33,6 +33,7 @@ extern bool           isStabilizing;
 extern unsigned long  stabilizingStartMs;
 extern bool           disablePidReset;
 extern double         stabilizingToleranceCritical;
+extern double         stabilizingToleranceWarning;
 extern PID            tempPID;
 
 // ---------------------------------------------------------------------------
@@ -229,8 +230,13 @@ void executeProgramStep()
     {
         // Attendre que la température soit proche de la consigne avant de démarrer
         // le décompte (utile pour refroidissement libre ou chauffe directe sans rampe)
-        float tempError = fabsf((float)(currentTemp - targetTemp));
-        if (tempError > (float)stabilizingToleranceCritical)
+        // Tolérance directionnelle : serrée si au-dessus de la consigne (refroidissement
+        // ou dépassement), large si en-dessous (chauffe depuis le froid).
+        float tempDelta = (float)(currentTemp - targetTemp);
+        bool outOfRange = (tempDelta > 0.0f)
+            ? (tempDelta > (float)stabilizingToleranceWarning)     // au-dessus : 5°C
+            : ((-tempDelta) > (float)stabilizingToleranceCritical); // en-dessous : 50°C
+        if (outOfRange)
         {
             phaseStartMs         = now;
             effectiveHoldStartMs = now;

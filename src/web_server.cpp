@@ -90,10 +90,10 @@ String buildStatusJson()
                               ? (now - effectiveHoldStartMs) : 0;
     doc["effectiveHoldMs"] = effHoldMs;
 
-    const char *phaseStr = (currentPhase == PHASE_RAMP && isStabilizing) ? "STABILIZING"
-                         : (currentPhase == PHASE_RAMP)                  ? "RAMP"
-                         : (currentPhase == PHASE_HOLD)                  ? "HOLD"
-                         : (currentPhase == PHASE_BOOST)                 ? "BOOST"
+    const char *phaseStr = (isStabilizing && (currentPhase == PHASE_RAMP || currentPhase == PHASE_HOLD)) ? "STABILIZING"
+                         : (currentPhase == PHASE_RAMP)  ? "RAMP"
+                         : (currentPhase == PHASE_HOLD)  ? "HOLD"
+                         : (currentPhase == PHASE_BOOST) ? "BOOST"
                          : "IDLE";
     doc["phase"] = phaseStr;
 
@@ -544,7 +544,8 @@ void setupWebServer()
     server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest *r) {
         String sd_ssid, sd_password;
         String prefill = "";
-        if (SD.exists("/config/wifi.json") && loadWiFiConfig(sd_ssid, sd_password))
+        WifiStaticConfig _ignored;
+        if (SD.exists("/config/wifi.json") && loadWiFiConfig(sd_ssid, sd_password, _ignored))
             prefill = sd_ssid;
 
         String html =
@@ -569,16 +570,25 @@ void setupWebServer()
     });
 
     server.on("/save_wifi", HTTP_POST, [](AsyncWebServerRequest *r) {
-        const AsyncWebParameter *ssidP = r->getParam("ssid",     true);
-        const AsyncWebParameter *passP = r->getParam("password", true);
-        String ssid = ssidP ? ssidP->value() : "";
-        String pass = passP ? passP->value() : "";
+        const AsyncWebParameter *ssidP     = r->getParam("ssid",     true);
+        const AsyncWebParameter *passP     = r->getParam("password", true);
+        const AsyncWebParameter *staticIpP = r->getParam("staticIp", true);
+        const AsyncWebParameter *gatewayP  = r->getParam("gateway",  true);
+        const AsyncWebParameter *subnetP   = r->getParam("subnet",   true);
+        const AsyncWebParameter *dnsP      = r->getParam("dns",      true);
 
-        if (ssid.length() > 0 && saveWiFiConfig(ssid, pass))
+        String ssid     = ssidP     ? ssidP->value()     : "";
+        String pass     = passP     ? passP->value()     : "";
+        String staticIp = staticIpP ? staticIpP->value() : "";
+        String gateway  = gatewayP  ? gatewayP->value()  : "";
+        String subnet   = subnetP   ? subnetP->value()   : "";
+        String dns      = dnsP      ? dnsP->value()      : "";
+
+        if (ssid.length() > 0 && saveWiFiConfig(ssid, pass, staticIp, gateway, subnet, dns))
         {
-            r->send(200, "text/plain", "Saved. Rebooting...");
-            delay(500);
-            ESP.restart();
+            // Répondre AVANT de redémarrer pour que le client reçoive bien le 200
+            // (le redémarrage est déclenché par le client via /reboot)
+            r->send(200, "text/plain", "OK");
         }
         else
         {

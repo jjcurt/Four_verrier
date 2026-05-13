@@ -228,6 +228,31 @@
                     <input type="password" id="password" name="password" placeholder="Laisser vide pour ne pas changer">
                     <small>Laissez vide pour conserver le mot de passe actuel</small>
                 </div>
+                <h3 style="margin: 20px 0 10px; color: #555; font-size: 16px;">🌐 Adresse IP</h3>
+                <div class="info-box">
+                    Laissez le champ <strong>IP statique</strong> vide pour utiliser le DHCP.<br>
+                    Si une IP est saisie, les 4 champs doivent être renseignés. L'IP est appliquée au prochain redémarrage.
+                </div>
+                <div class="form-row" style="grid-template-columns: repeat(2, 1fr);">
+                    <div class="form-group">
+                        <label for="staticIp">IP statique</label>
+                        <input type="text" id="staticIp" name="staticIp" placeholder="ex: 192.168.0.100 (vide = DHCP)">
+                    </div>
+                    <div class="form-group">
+                        <label for="gateway">Passerelle</label>
+                        <input type="text" id="gateway" name="gateway" placeholder="ex: 192.168.0.254">
+                    </div>
+                </div>
+                <div class="form-row" style="grid-template-columns: repeat(2, 1fr);">
+                    <div class="form-group">
+                        <label for="subnet">Masque de sous-réseau</label>
+                        <input type="text" id="subnet" name="subnet" placeholder="ex: 255.255.255.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="dns">DNS</label>
+                        <input type="text" id="dns" name="dns" placeholder="ex: 192.168.0.254">
+                    </div>
+                </div>
                 <button type="submit" class="btn">💾 Enregistrer & Redémarrer</button>
                 <button type="button" class="btn btn-secondary" onclick="rebootSystem()">🔄 Redémarrer uniquement</button>
                 <div class="status-message" id="wifiStatus"></div>
@@ -373,8 +398,9 @@
     </div>
 
     <script>
-        // Store original SSID for comparison
+        // Store original WiFi config for change detection
         let originalSsid = '';
+        let originalStaticIp = '', originalGateway = '', originalSubnet = '', originalDns = '';
 
         // Load current configuration on page load
         window.onload = function() {
@@ -390,9 +416,18 @@
                 .then(text => {
                     const config = JSON.parse(text);
                     originalSsid = config.ssid || '';
-                    document.getElementById('ssid').value = originalSsid;
-                    document.getElementById('currentSsid').textContent = 
-                        originalSsid ? `SSID actuel: ${originalSsid}` : 'Aucune configuration WiFi trouvée';
+                    document.getElementById('ssid').value     = originalSsid;
+                    originalStaticIp = config.staticIp || '';
+                    originalGateway  = config.gateway  || '';
+                    originalSubnet   = config.subnet   || '';
+                    originalDns      = config.dns      || '';
+                    document.getElementById('staticIp').value = originalStaticIp;
+                    document.getElementById('gateway').value  = originalGateway;
+                    document.getElementById('subnet').value   = originalSubnet;
+                    document.getElementById('dns').value      = originalDns;
+                    const ipInfo = config.staticIp ? ` — IP: ${config.staticIp}` : ' — IP: DHCP';
+                    document.getElementById('currentSsid').textContent =
+                        originalSsid ? `SSID: ${originalSsid}${ipInfo}` : 'Aucune configuration WiFi trouvée';
                 })
                 .catch(error => {
                     originalSsid = '';
@@ -496,18 +531,27 @@
         document.getElementById('wifiForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const ssid = document.getElementById('ssid').value.trim();
+            const ssid     = document.getElementById('ssid').value.trim();
             const password = document.getElementById('password').value;
+            const staticIp = document.getElementById('staticIp').value.trim();
+            const gateway  = document.getElementById('gateway').value.trim();
+            const subnet   = document.getElementById('subnet').value.trim();
+            const dns      = document.getElementById('dns').value.trim();
 
-            // Check if SSID is empty
             if (!ssid) {
                 showStatus('wifiStatus', 'Le SSID ne peut pas être vide', 'error');
                 return;
             }
+            if (staticIp && (!gateway || !subnet || !dns)) {
+                showStatus('wifiStatus', 'Si une IP statique est définie, passerelle, masque et DNS doivent aussi être renseignés.', 'error');
+                return;
+            }
 
-            // Check if SSID has actually changed
-            if (ssid === originalSsid && !password) {
-                if (!confirm('⚠️ Aucune modification détectée\n\nLe SSID n\'a pas changé et aucun mot de passe n\'a été saisi.\n\nVoulez-vous simplement redémarrer le système sans modifier la configuration WiFi?\n\n(Utilisez plutôt le bouton "Redémarrer uniquement" pour cela)')) {
+            // Check if anything has actually changed
+            const ipChanged = (staticIp !== originalStaticIp || gateway !== originalGateway ||
+                               subnet !== originalSubnet || dns !== originalDns);
+            if (ssid === originalSsid && !password && !ipChanged) {
+                if (!confirm('⚠️ Aucune modification détectée\n\nLe SSID, le mot de passe et les paramètres IP n\'ont pas changé.\n\nVoulez-vous simplement redémarrer le système sans modifier la configuration WiFi?\n\n(Utilisez plutôt le bouton "Redémarrer uniquement" pour cela)')) {
                     return;
                 }
                 // Just reboot without saving
@@ -533,17 +577,28 @@
             const formData = new FormData();
             formData.append('ssid', ssid);
             if (password) formData.append('password', password);
+            formData.append('staticIp', staticIp);
+            formData.append('gateway',  gateway);
+            formData.append('subnet',   subnet);
+            formData.append('dns',      dns);
 
             fetch('/save_wifi', {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.text())
-            .then(data => {
-                showStatus('wifiStatus', 'Configuration WiFi enregistrée. Redémarrage en cours...', 'success');
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 3000);
+            .then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.text();
+            })
+            .then(() => {
+                const msg = staticIp
+                    ? `Configuration enregistrée. Redémarrage en cours... Reconnectez-vous à http://${staticIp}/ dans quelques secondes.`
+                    : 'Configuration WiFi enregistrée. Redémarrage en cours...';
+                showStatus('wifiStatus', msg, 'success');
+                // Déclencher le redémarrage séparément ; la coupure réseau est normale
+                fetch('/reboot', { method: 'POST' }).catch(() => {});
+                const redirectUrl = staticIp ? `http://${staticIp}/` : '/';
+                setTimeout(() => { window.location.href = redirectUrl; }, 5000);
             })
             .catch(error => {
                 showStatus('wifiStatus', 'Erreur lors de la sauvegarde: ' + error, 'error');
@@ -698,6 +753,6 @@
             }
         }
     </script>
-    <div class="build-footer">Build: v1.6.1r7 - 2026-05-12 14:44</div>
+    <div class="build-footer">Build: v1.6.1r20 - 2026-05-13</div>
 </body>
 </html>

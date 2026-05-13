@@ -224,6 +224,48 @@
         <button class="button" id="stopBtn" disabled>Arrêter</button>
     </div>    
     <div class="card">
+        <h2 onclick="toggleSettings()" style="cursor: pointer; user-select: none;">
+            ⚙️ Paramètres <span id="settingsToggle">►</span>
+        </h2>
+        <div id="settingsPanel" style="display: none;">
+            <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #ddd;">
+                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">Affichage graphique</h3>
+                <label for="updateIntervalInput" style="display: block; margin-bottom: 5px;">
+                    Rafraîchissement Web: <span id="updateIntervalDisplay">1000</span> ms
+                </label>
+                <input type="range" id="updateIntervalInput" min="100" max="10000" step="100" value="1000" 
+                       style="width: 100%; margin-bottom: 5px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666;">
+                    <span>100ms</span>
+                    <span>10s</span>
+                </div>
+                <p style="font-size: 0.85em; color: #666; margin: 10px 0 0 0;">
+                    ℹ️ Contrôle uniquement le rafraîchissement de l'interface web (WebSocket).<br>
+                    Le graphe TFT utilise idleGraphUpdateInterval (voir config.html).<br>
+                    La régulation PID s'exécute toujours à 1000ms (fixe).
+                </p>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">PID (régulateur)</h3>
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;">
+                    <label for="pidKpInput">Kp:</label>
+                    <input type="number" id="pidKpInput" step="0.1" value="40" style="width: 100%; padding: 5px;">
+                    
+                    <label for="pidKiInput">Ki:</label>
+                    <input type="number" id="pidKiInput" step="0.01" value="0.1" style="width: 100%; padding: 5px;">
+                    
+                    <label for="pidKdInput">Kd:</label>
+                    <input type="number" id="pidKdInput" step="0.1" value="4" style="width: 100%; padding: 5px;">
+                </div>
+            </div>
+
+            <button class="button" id="applySettingsBtn">Appliquer les paramètres</button>
+            <div style="margin-top: 10px; font-size: 11px; color: #666;">
+                ℹ️ Les paramètres sont sauvegardés sur la carte SD
+            </div>
+        </div>
+    </div>
+    <div class="card">
         <h2>État actuel</h2>
         <!-- Phase badge + programme -->
         <div style="margin-bottom: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -282,49 +324,7 @@
             </div>
         </div>
     </div>
-    <div class="card">
-        <h2 onclick="toggleSettings()" style="cursor: pointer; user-select: none;">
-            ⚙️ Paramètres <span id="settingsToggle">►</span>
-        </h2>
-        <div id="settingsPanel" style="display: none;">
-            <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #ddd;">
-                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">Affichage graphique</h3>
-                <label for="updateIntervalInput" style="display: block; margin-bottom: 5px;">
-                    Rafraîchissement Web: <span id="updateIntervalDisplay">1000</span> ms
-                </label>
-                <input type="range" id="updateIntervalInput" min="100" max="10000" step="100" value="1000" 
-                       style="width: 100%; margin-bottom: 5px;">
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #666;">
-                    <span>100ms</span>
-                    <span>10s</span>
-                </div>
-                <p style="font-size: 0.85em; color: #666; margin: 10px 0 0 0;">
-                    ℹ️ Contrôle uniquement le rafraîchissement de l'interface web (WebSocket).<br>
-                    Le graphe TFT utilise idleGraphUpdateInterval (voir config.html).<br>
-                    La régulation PID s'exécute toujours à 1000ms (fixe).
-                </p>
-            </div>
-            <div style="margin-bottom: 15px;">
-                <h3 style="margin: 10px 0 10px 0; font-size: 16px;">PID (régulateur)</h3>
-                <div style="display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;">
-                    <label for="pidKpInput">Kp:</label>
-                    <input type="number" id="pidKpInput" step="0.1" value="40" style="width: 100%; padding: 5px;">
-                    
-                    <label for="pidKiInput">Ki:</label>
-                    <input type="number" id="pidKiInput" step="0.01" value="0.1" style="width: 100%; padding: 5px;">
-                    
-                    <label for="pidKdInput">Kd:</label>
-                    <input type="number" id="pidKdInput" step="0.1" value="4" style="width: 100%; padding: 5px;">
-                </div>
-            </div>
-
-            <button class="button" id="applySettingsBtn">Appliquer les paramètres</button>
-            <div style="margin-top: 10px; font-size: 11px; color: #666;">
-                ℹ️ Les paramètres sont sauvegardés sur la carte SD
-            </div>
-        </div>
-    </div>
-
+ 
      <div class="card">
         <h2>
             📊 Évolution de la température
@@ -2271,6 +2271,6 @@
             }
         };
     </script>
-    <div class="build-footer">Build: v1.6.1r7 - 2026-05-12 14:44</div>
+    <div class="build-footer">Build: v1.6.1r20 - 2026-05-13</div>
 </body>
 </html>

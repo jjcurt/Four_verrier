@@ -830,30 +830,22 @@
                 return padding.left + (normalized * graphWidth);
             }
 
-            // Draw target temperature line (solid blue - real setpoint with lead compensation)
+            // Draw target temperature line (solid blue)
+            // null values in targetHistory (idle mode) create gaps — no line drawn during IDLE
             if (targetHistory.length > 1) {
                 ctx.strokeStyle = '#2196F3';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 let firstPoint = true;
-                let drawnPoints = 0;
-                targetHistory.forEach((d, i) => {
-                    // Only draw points within visible window
-                    if (d.time >= minTime && d.time <= maxTime) {
-                        const x = timeToX(d.time);
-                        const y = tempToY(d.target);
-                        if (firstPoint) {
-                            ctx.moveTo(x, y);
-                            firstPoint = false;
-                            console.log('[DRAW] Target FIRST point:', d.time.toFixed(1) + 's', d.target.toFixed(1) + '°C', '→ x:', x.toFixed(0), 'y:', y.toFixed(0));
-                        } else {
-                            ctx.lineTo(x, y);
-                        }
-                        drawnPoints++;
-                    }
+                targetHistory.forEach(d => {
+                    if (d.time < minTime || d.time > maxTime) return;
+                    if (d.target === null) { firstPoint = true; return; } // trou IDLE
+                    const x = timeToX(d.time);
+                    const y = tempToY(d.target);
+                    if (firstPoint) { ctx.moveTo(x, y); firstPoint = false; }
+                    else            { ctx.lineTo(x, y); }
                 });
                 ctx.stroke();
-                console.log('[DRAW] Target curve: drew', drawnPoints, '/', targetHistory.length, 'points');
             }
 
             // Draw current temperature line (solid green)
@@ -1873,13 +1865,11 @@
                         const timeSinceLastAdd = now - lastDataAddTime;
                         
                         // Add target point if we just added a temp point (within 200ms tolerance)
-                        // Increased tolerance from 100ms to 200ms to handle initialization edge case
                         if (timeSinceLastAdd < 200 && clientStartTime) {
                             const clientElapsedSeconds = (now - clientStartTime) / 1000;
-                            // WORKAROUND: In IDLE mode, firmware sends target=0°C (no program running)
-                            // This compresses Y-axis scale and makes curves invisible
-                            // Fix: Display currentTemp as target when target=0 (IDLE mode)
-                            const displayTarget = (data.target === 0) ? data.temp : data.target;
+                            // null quand idle (target=0) → crée un trou dans la courbe
+                            // sans null, l'axe Y se comprimerait vers 0 et la ligne se dessinerait sur la temp
+                            const displayTarget = (data.target > 0) ? data.target : null;
                             targetHistory.push({time: clientElapsedSeconds, target: displayTarget});
                             console.log('[DATA] Added target point:', clientElapsedSeconds.toFixed(1) + 's', displayTarget.toFixed(1) + '°C', (data.target === 0 ? '(IDLE, using temp)' : ''), 'total:', targetHistory.length);
                         }

@@ -32,6 +32,7 @@ extern double         pidOutput;
 extern bool           isStabilizing;
 extern unsigned long  stabilizingStartMs;
 extern bool           disablePidReset;
+extern double         stabilizingToleranceCritical;
 extern PID            tempPID;
 
 // ---------------------------------------------------------------------------
@@ -226,6 +227,19 @@ void executeProgramStep()
 
     case PHASE_HOLD:
     {
+        // Attendre que la température soit proche de la consigne avant de démarrer
+        // le décompte (utile pour refroidissement libre ou chauffe directe sans rampe)
+        float tempError = fabsf((float)(currentTemp - targetTemp));
+        if (tempError > (float)stabilizingToleranceCritical)
+        {
+            phaseStartMs         = now;
+            effectiveHoldStartMs = now;
+            isStabilizing        = true;
+            stabilizingStartMs   = now;
+            break;
+        }
+        isStabilizing = false;
+
         unsigned long holdElapsedMs  = now - phaseStartMs;
         unsigned long holdDurationMs = step.holdTime * 60000UL;
 

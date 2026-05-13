@@ -111,6 +111,31 @@
             color: #333;
             text-shadow: 0 0 3px white;
         }
+        /* Phase badge */
+        .phase-badge {
+            display: inline-block;
+            padding: 3px 14px;
+            border-radius: 12px;
+            font-size: 0.82em;
+            font-weight: bold;
+            letter-spacing: 0.08em;
+        }
+        .phase-idle  { background: #424242; color: #bbb; }
+        .phase-boost { background: #F57F17; color: #fff; }
+        .phase-ramp  { background: #E65100; color: #fff; }
+        .phase-hold  { background: #2E7D32; color: #fff; }
+        .phase-stab  { background: #F9A825; color: #333; }
+        /* Status grid */
+        .status-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+            align-items: flex-end;
+        }
+        .status-cell { min-width: 90px; }
+        .stat-label { font-size: 0.78em; color: #888; margin-bottom: 3px; }
+        .stat-value { font-size: 1.3em; font-weight: 600; }
         /* Graph canvas */
         #tempGraph {
             width: 100%;
@@ -200,30 +225,60 @@
     </div>    
     <div class="card">
         <h2>État actuel</h2>
-        <div class="status">
-            <div>
-                <div>Température</div>
+        <!-- Phase badge + programme -->
+        <div style="margin-bottom: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <span id="phaseBadge" class="phase-badge phase-idle">IDLE</span>
+            <span id="programStatus" style="font-size: 0.95em; color: #555;">Arrêté</span>
+        </div>
+        <!-- Températures -->
+        <div class="status-row">
+            <div class="status-cell">
+                <div class="stat-label">Température</div>
                 <div class="temp" id="currentTemp">--°C</div>
             </div>
-            <div>
-                <div>Cible</div>
-                <div class="temp" id="targetTemp">--°C</div>
+            <div class="status-cell">
+                <div class="stat-label">Consigne</div>
+                <div style="font-size: 2em; font-weight: bold; color: #F9A825;" id="targetTemp">--°C</div>
             </div>
-            <div>
-                <div>Programme</div>
-                <div id="programStatus">Not running</div>
+            <div class="status-cell">
+                <div class="stat-label">Filtrée (EMA)</div>
+                <div class="stat-value" style="color: #888;" id="filteredTempDisplay">--°C</div>
             </div>
-            <div>
-                <div>Étape</div>
-                <div id="stepStatus">-</div>
+        </div>
+        <!-- Timings -->
+        <div class="status-row">
+            <div class="status-cell">
+                <div class="stat-label">Programme total</div>
+                <div class="stat-value" style="color: #555;" id="elapsedTotal">0:00</div>
             </div>
-            <div>
-                <div>Temps total</div>
-                <div id="elapsedTotal">0:00</div>
+            <div class="status-cell">
+                <div class="stat-label">Étape</div>
+                <div class="stat-value" style="color: #555; font-size: 1.1em;" id="stepStatus">-</div>
             </div>
-            <div>
-                <div>Temps étape</div>
-                <div id="elapsedStep">0:00</div>
+            <div class="status-cell">
+                <div class="stat-label" style="color: #FF8C00;">Rampe écoulée</div>
+                <div class="stat-value" style="color: #FF8C00;" id="rampElapsed">--:--</div>
+            </div>
+            <div class="status-cell">
+                <div class="stat-label" style="color: #4CAF50;">Maintien restant</div>
+                <div class="stat-value" style="color: #4CAF50;" id="holdRemaining">--:--</div>
+            </div>
+        </div>
+        <!-- SSR / puissance -->
+        <div class="status-row" style="align-items: center; margin-bottom: 0;">
+            <div class="status-cell">
+                <div class="stat-label">SSR 1</div>
+                <div>
+                    <span class="ssr-indicator off" id="ssr1Indicator"></span>
+                    <span id="ssr1Status" style="font-size: 1.1em; font-weight: bold;">OFF</span>
+                </div>
+            </div>
+            <div style="flex: 1; min-width: 160px;">
+                <div class="stat-label">Puissance SSR 2</div>
+                <div class="ssr2-bar-container" style="width: 100%;">
+                    <div class="ssr2-bar" id="ssr2Bar"></div>
+                    <div class="ssr2-text" id="ssr2Percent">0%</div>
+                </div>
             </div>
         </div>
     </div>
@@ -322,28 +377,6 @@
         </div>
     </div>
 
-    <div class="card">
-        <h2>⚡ État des relais SSR</h2>
-        <div class="status">
-            <div>
-                <div style="margin-bottom: 10px; font-weight: 500;">SSR 1 (Résistance principale)</div>
-                <div>
-                    <span class="ssr-indicator off" id="ssr1Indicator"></span>
-                    <span id="ssr1Status" style="font-size:1.2em; font-weight:bold">OFF</span>
-                </div>
-            </div>
-            <div>
-                <div style="margin-bottom: 10px; font-weight: 500;">SSR 2 (Contrôle PWM)</div>
-                <div>
-                    <div class="ssr2-bar-container">
-                        <div class="ssr2-bar" id="ssr2Bar"></div>
-                        <div class="ssr2-text" id="ssr2Percent">0%</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
         let ws = null;
         let tempHistory = []; // Array of {time: seconds, temp: value}
@@ -377,11 +410,37 @@
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
             const s = Math.floor(seconds % 60);
-            
-            if (h > 0) {
-                return `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-            }
+            if (h > 0) return `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
             return `${m}:${s.toString().padStart(2,'0')}`;
+        }
+
+        // Temperature color matching TFT palette (DISP_* colors)
+        function getTempColor(temp, phase, target) {
+            if (phase === 'BOOST') return '#F9A825';              // jaune — pleine puissance
+            if (phase === 'RAMP' || phase === 'STABILIZING') {
+                return (target <= 0 || temp <= target) ? '#FF8C00' : '#E040FB'; // orange montée, magenta descente
+            }
+            if (phase === 'HOLD') {
+                const margin = 20;
+                if (temp > target + margin) return '#F44336';    // rouge — trop chaud
+                if (temp < target - margin) return '#00BCD4';    // cyan — trop froid
+                return '#4CAF50';                                 // vert — dans la zone
+            }
+            // IDLE / refroidissement
+            if (temp > 150) return '#F44336';
+            if (temp > 100) return '#FF8C00';
+            if (temp > 60)  return '#F9A825';
+            if (temp > 40)  return '#4CAF50';
+            return '#aaaaaa';
+        }
+
+        // Phase badge class and label
+        function updatePhaseBadge(phase) {
+            const badge = document.getElementById('phaseBadge');
+            const classes = { BOOST: 'phase-boost', RAMP: 'phase-ramp', HOLD: 'phase-hold',
+                              STABILIZING: 'phase-stab', IDLE: 'phase-idle' };
+            badge.className = 'phase-badge ' + (classes[phase] || 'phase-idle');
+            badge.textContent = phase || 'IDLE';
         }
 
         // Toggle graph display mode
@@ -1756,9 +1815,15 @@
                         emergencyBanner.classList.remove('active');
                     }
                     
+                    // Update phase badge
+                    if (data.phase) updatePhaseBadge(data.phase);
+
                     // Update temperature displays
                     if (typeof data.temp === 'number') {
-                        document.getElementById('currentTemp').textContent = data.temp.toFixed(1) + '°C';
+                        const color = getTempColor(data.temp, data.phase || 'IDLE', data.target || 0);
+                        const el = document.getElementById('currentTemp');
+                        el.textContent = data.temp.toFixed(1) + '°C';
+                        el.style.color = color;
                         
                         // Store for block view (v1.5.0)
                         window.currentTemperature = data.temp;
@@ -1796,6 +1861,10 @@
                         }
                     }
                     
+                    if (typeof data.filteredTemp === 'number') {
+                        document.getElementById('filteredTempDisplay').textContent = data.filteredTemp.toFixed(1) + '°C';
+                    }
+
                     if (typeof data.target === 'number') {
                         document.getElementById('targetTemp').textContent = data.target.toFixed(1) + '°C';
                         
@@ -1902,33 +1971,51 @@
                     }
                     
                     if (isRunning) {
-                        let statusText = data.programName || 'En cours';
-                        if (data.phase) {
-                            statusText += ` (${data.phase})`;
-                        }
-                        document.getElementById('programStatus').textContent = statusText;
-                        
-                        // Check for presence of totalSteps (programStep can be 0, which is falsy)
+                        document.getElementById('programStatus').textContent = data.programName || 'En cours';
+
                         if (typeof data.programStep !== 'undefined' && data.totalSteps) {
-                            document.getElementById('stepStatus').textContent = `Étape ${data.programStep}/${data.totalSteps}`;
+                            document.getElementById('stepStatus').textContent = `${data.programStep}/${data.totalSteps}`;
                         } else {
                             document.getElementById('stepStatus').textContent = '-';
                         }
-                        
-                        // Update time displays
+
                         document.getElementById('elapsedTotal').textContent = formatTime(data.totalElapsedSeconds || 0);
-                        document.getElementById('elapsedStep').textContent = formatTime(data.stepElapsedSeconds || 0);
-                        
-                        // Enable stop button, disable start button
+
+                        // Ramp elapsed (orange count-up)
+                        const rampEl = document.getElementById('rampElapsed');
+                        if (typeof data.rampElapsedSeconds === 'number' &&
+                            (data.phase === 'RAMP' || data.phase === 'HOLD' || data.phase === 'STABILIZING')) {
+                            rampEl.textContent = formatTime(data.rampElapsedSeconds);
+                            rampEl.style.opacity = (data.phase === 'RAMP') ? '1' : '0.5';
+                        } else {
+                            rampEl.textContent = '--:--';
+                            rampEl.style.opacity = '0.4';
+                        }
+
+                        // Hold remaining (green countdown)
+                        const holdEl = document.getElementById('holdRemaining');
+                        if (typeof data.holdRemainingSeconds === 'number' && data.holdRemainingSeconds > 0) {
+                            holdEl.textContent = formatTime(data.holdRemainingSeconds);
+                            holdEl.style.opacity = (data.phase === 'HOLD') ? '1' : '0.5';
+                        } else if (data.phase === 'HOLD') {
+                            holdEl.textContent = '0:00';
+                            holdEl.style.opacity = '1';
+                        } else {
+                            holdEl.textContent = '--:--';
+                            holdEl.style.opacity = '0.4';
+                        }
+
                         startBtn.disabled = true;
                         stopBtn.disabled = false;
                     } else {
                         document.getElementById('programStatus').textContent = 'Arrêté';
                         document.getElementById('stepStatus').textContent = '-';
                         document.getElementById('elapsedTotal').textContent = '0:00';
-                        document.getElementById('elapsedStep').textContent = '0:00';
-                        
-                        // Enable start button, disable stop button
+                        document.getElementById('rampElapsed').textContent = '--:--';
+                        document.getElementById('holdRemaining').textContent = '--:--';
+                        document.getElementById('rampElapsed').style.opacity = '0.4';
+                        document.getElementById('holdRemaining').style.opacity = '0.4';
+
                         startBtn.disabled = false;
                         stopBtn.disabled = true;
                     }
@@ -2010,10 +2097,14 @@
                 if (typeof s.pidKd === 'number') {
                     document.getElementById('pidKdInput').value = s.pidKd;
                 }
-                if (typeof s.tempOffset === 'number') {
-                    document.getElementById('tempOffsetInput').value = s.tempOffset;
+                if (typeof s.filteredTemp === 'number') {
+                    document.getElementById('filteredTempDisplay').textContent = s.filteredTemp.toFixed(1) + '°C';
                 }
-                document.getElementById('programStatus').textContent = s.program ? 'En cours' : 'Arrêté';
+                if (s.phase) updatePhaseBadge(s.phase);
+                if (typeof s.temp === 'number' && s.phase) {
+                    document.getElementById('currentTemp').style.color = getTempColor(s.temp, s.phase, s.target || 0);
+                }
+                document.getElementById('programStatus').textContent = s.program ? (s.programName || 'En cours') : 'Arrêté';
                 updateSSRDisplay(s.ssr1, s.ssr2);
                 drawGraph();
             }).catch(()=>{/* ignore if not available */});

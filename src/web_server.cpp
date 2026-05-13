@@ -47,8 +47,11 @@ extern FiringProgram currentProgram;
 extern ProgramPhase currentPhase;
 extern unsigned long programStartMs;
 extern unsigned long phaseStartMs;
+extern unsigned long stepStartMs;
 extern unsigned long effectiveHoldStartMs;
 extern double        boostStartTemp;
+extern double        filteredTemp;
+extern double        pidOutput;
 extern PID tempPID;
 
 // ---------------------------------------------------------------------------
@@ -57,7 +60,7 @@ extern PID tempPID;
 
 String buildStatusJson()
 {
-    StaticJsonDocument<1536> doc;
+    StaticJsonDocument<2048> doc;
 
     doc["temp"]           = currentTemp;
     doc["target"]         = targetTemp;
@@ -93,6 +96,38 @@ String buildStatusJson()
                          : (currentPhase == PHASE_BOOST)                 ? "BOOST"
                          : "IDLE";
     doc["phase"] = phaseStr;
+
+    // Ramp elapsed (count-up depuis stepStartMs) / Hold remaining (compte à rebours)
+    unsigned long rampElapsedSec = 0;
+    if (programRunning && programLoaded)
+    {
+        if (currentPhase == PHASE_RAMP)
+            rampElapsedSec = (now - phaseStartMs) / 1000;
+        else if (currentPhase == PHASE_HOLD && stepStartMs > 0 && phaseStartMs > stepStartMs)
+            rampElapsedSec = (phaseStartMs - stepStartMs) / 1000;
+    }
+    doc["rampElapsedSeconds"] = rampElapsedSec;
+
+    unsigned long holdRemainSec = 0;
+    if (programRunning && programLoaded && currentProgram.numSteps > 0)
+    {
+        uint8_t si = currentProgram.currentStep;
+        if (si >= currentProgram.numSteps) si = currentProgram.numSteps - 1;
+        unsigned long holdTotal = (unsigned long)currentProgram.steps[si].holdTime * 60UL;
+        if (currentPhase == PHASE_HOLD)
+        {
+            unsigned long holdElapsed = (now - phaseStartMs) / 1000;
+            holdRemainSec = (holdElapsed < holdTotal) ? holdTotal - holdElapsed : 0;
+        }
+        else
+        {
+            holdRemainSec = holdTotal;
+        }
+    }
+    doc["holdRemainingSeconds"] = holdRemainSec;
+
+    doc["filteredTemp"] = filteredTemp;
+    doc["pidOutput"]    = (uint16_t)constrain((int)round(pidOutput), 0, 1023);
 
     if (programLoaded && currentProgram.numSteps > 0)
     {

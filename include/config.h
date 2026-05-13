@@ -14,7 +14,7 @@
 
 // Firmware version (injectée par PlatformIO via build_flags si disponible)
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "1.6.1r16"
+#define FIRMWARE_VERSION "1.6.1r17"
 #endif
 
 // --- Serveur web ---

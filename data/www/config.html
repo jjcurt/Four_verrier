@@ -135,6 +135,16 @@
             margin-left: 10px;
         }
 
+        .btn-download {
+            background: linear-gradient(135deg, #43a047 0%, #1b5e20 100%);
+            margin-left: 10px;
+        }
+
+        .btn-upload {
+            background: linear-gradient(135deg, #ef6c00 0%, #bf360c 100%);
+            margin-left: 10px;
+        }
+
         .current-value {
             background: #f8f9fa;
             padding: 10px;
@@ -354,7 +364,9 @@
                 </div>
                 <div class="current-value" id="currentPid">Chargement...</div>
                 <button type="submit" class="btn">💾 Enregistrer tous les paramètres</button>
-                <button type="button" class="btn btn-secondary" onclick="loadDefaults()">🔄 Charger valeurs v1.4.9</button>
+                <button type="button" class="btn btn-download" onclick="downloadSettings()">⬇ Télécharger settings.json</button>
+                <button type="button" class="btn btn-upload" onclick="document.getElementById('settingsFileInput').click()">⬆ Téléverser settings.json</button>
+                <input type="file" id="settingsFileInput" accept=".json" style="display:none" onchange="uploadSettings(this)">
                 <div class="status-message" id="pidStatus"></div>
             </form>
         </div>
@@ -646,6 +658,31 @@
                 showStatus('pidStatus', 'Erreur lors de la sauvegarde: ' + error, 'error');
             });
         });
+
+        function downloadSettings() {
+            window.location.href = '/download?path=/config/settings.json';
+        }
+
+        function uploadSettings(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            // Forcer le nom settings.json quel que soit le nom du fichier source
+            formData.append('file', file, 'settings.json');
+            fetch('/upload_to?dest=/config', { method: 'POST', body: formData })
+                .then(r => r.ok ? r.text() : Promise.reject('Erreur serveur'))
+                .then(() => {
+                    showStatus('pidStatus',
+                        '✅ settings.json téléversé. Cliquez sur "Enregistrer" pour appliquer au firmware en cours.',
+                        'success');
+                    input.value = '';
+                    setTimeout(() => loadCurrentConfig(), 400);
+                })
+                .catch(err => {
+                    showStatus('pidStatus', 'Erreur lors du téléversement : ' + err, 'error');
+                    input.value = '';
+                });
+        }
 
         // Show status message
         function showStatus(elementId, message, type) {

@@ -21,12 +21,14 @@ extern bool          programLoaded;
 extern bool          programRunning;
 extern FiringProgram currentProgram;
 extern unsigned long programStartMs;
+extern double        programStartTemp;
 extern ProgramPhase      currentPhase;
 extern bool          isStabilizing;
 extern unsigned long phaseStartMs;
 extern unsigned long stepStartMs;
 extern float         rampStartTemp;
 extern double        stabilizingToleranceStrict;
+extern double        filteredTemp;
 extern float         tempSamples[];
 extern int           tempSampleIdx;
 extern bool          tempSamplesFilled;
@@ -118,7 +120,7 @@ void updateDisplay(bool force)
         }
         tft.fillRect(DISP_TEMP_X, DISP_TEMP_Y, DISP_TEMP_W, DISP_TEMP_H, DISP_BLACK);
         tft.setTextColor(tempColor, DISP_BLACK);
-        snprintf(buf, sizeof(buf), "%5.1f", currentTemp);
+        snprintf(buf, sizeof(buf), "%5.1f", filteredTemp);
         tft.drawString(buf, DISP_TEMP_X, DISP_TEMP_Y, 4);
 
         // --- Température cible (jaune, label statique) ---
@@ -347,7 +349,7 @@ void updateDisplay(bool force)
                 float minT = 9999.0, maxT = -9999.0;
                 for (int i = 0; i < currentProgram.numSteps; ++i)
                 {
-                    float t0 = (i == 0) ? (float)currentTemp : currentProgram.steps[i - 1].targetTemp;
+                    float t0 = (i == 0) ? (float)(programStartTemp > 0 ? programStartTemp : 25.0) : currentProgram.steps[i - 1].targetTemp;
                     float t1 = currentProgram.steps[i].targetTemp;
                     if (t0 < minT) minT = t0;
                     if (t1 < minT) minT = t1;
@@ -366,7 +368,7 @@ void updateDisplay(bool force)
 
                 for (int i = 0; i < currentProgram.numSteps; ++i)
                 {
-                    float t0 = (i == 0) ? (float)currentTemp : currentProgram.steps[i - 1].targetTemp;
+                    float t0 = (i == 0) ? (float)(programStartTemp > 0 ? programStartTemp : 25.0) : currentProgram.steps[i - 1].targetTemp;
                     float t1 = currentProgram.steps[i].targetTemp;
                     int y0Bloc = y0 + h - (int)((t0 - minT) / (maxT - minT) * (h - 1));
                     int y1Bloc = y0 + h - (int)((t1 - minT) / (maxT - minT) * (h - 1));

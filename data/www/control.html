@@ -214,7 +214,7 @@
         <p id="emergencyMessage">Limite de sécurité atteinte</p>
         <p style="font-size: 0.95em; margin-top: 10px;">🔥 Relais coupés | 🚨 Attendre refroidissement | 🔄 Redémarrer l'ESP32</p>
     </div>
- 
+    <!-- Section programmes -->
     <div class="card">
         <h2>Contrôle des programmes</h2>
         <select id="programSelect">
@@ -222,7 +222,8 @@
         </select>
         <button class="button" id="startBtn">Démarrer</button>
         <button class="button" id="stopBtn" disabled>Arrêter</button>
-    </div>    
+    </div>   
+    <!-- Section paramètres --> 
     <div class="card">
         <h2 onclick="toggleSettings()" style="cursor: pointer; user-select: none;">
             ⚙️ Paramètres <span id="settingsToggle">►</span>
@@ -247,24 +248,45 @@
             </div>
             <div style="margin-bottom: 15px;">
                 <h3 style="margin: 10px 0 10px 0; font-size: 16px;">PID (régulateur)</h3>
-                <div style="display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;">
-                    <label for="pidKpInput">Kp:</label>
-                    <input type="number" id="pidKpInput" step="0.1" value="40" style="width: 100%; padding: 5px;">
-                    
-                    <label for="pidKiInput">Ki:</label>
-                    <input type="number" id="pidKiInput" step="0.01" value="0.1" style="width: 100%; padding: 5px;">
-                    
-                    <label for="pidKdInput">Kd:</label>
-                    <input type="number" id="pidKdInput" step="0.1" value="4" style="width: 100%; padding: 5px;">
+                <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label for="pidKpInput" style="white-space: nowrap; font-weight: 600;">Kp</label>
+                        <input type="number" id="pidKpInput" step="0.1" value="40"
+                               style="width: 80px; padding: 5px; text-align: right;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label for="pidKiInput" style="white-space: nowrap; font-weight: 600;">Ki</label>
+                        <input type="number" id="pidKiInput" step="0.01" value="0.1"
+                               style="width: 80px; padding: 5px; text-align: right;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label for="pidKdInput" style="white-space: nowrap; font-weight: 600;">Kd</label>
+                        <input type="number" id="pidKdInput" step="0.1" value="4"
+                               style="width: 80px; padding: 5px; text-align: right;">
+                    </div>
+                    <button class="button" id="applySettingsBtn" style="margin-left: auto; white-space: nowrap;">
+                        Appliquer
+                    </button>
                 </div>
             </div>
 
-            <button class="button" id="applySettingsBtn">Appliquer les paramètres</button>
-            <div style="margin-top: 10px; font-size: 11px; color: #666;">
-                ℹ️ Les paramètres sont sauvegardés sur la carte SD
+            <div style="padding: 10px 12px; background: #f5f5f5; border-radius: 6px; font-size: 0.88em; color: #444;">
+                <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                    <span>α EMA : <strong id="alphaDisplay" style="color: #1565C0;">--</strong></span>
+                    <span>Intervalle log : <strong id="logIntervalDisplay" style="color: #555;">--</strong></span>
+                    <span>Version : <strong id="firmwareVersionDisplay" style="color: #555;">--</strong></span>
+                </div>
+                <div style="margin-top: 5px; font-size: 0.85em; color: #999;">
+                    Lecture seule — α EMA et intervalle modifiables dans
+                    <a href="config.html" style="color: #1976D2;">config.html</a>
+                </div>
+            </div>
+            <div style="margin-top: 8px; font-size: 11px; color: #666;">
+                ℹ️ Les paramètres PID sont sauvegardés sur la carte SD
             </div>
         </div>
     </div>
+    <!-- Section état actuel  -->
     <div class="card">
         <h2>État actuel</h2>
         <!-- Phase badge + programme -->
@@ -283,8 +305,8 @@
                 <div style="font-size: 2em; font-weight: bold; color: #F9A825;" id="targetTemp">--°C</div>
             </div>
             <div class="status-cell">
-                <div class="stat-label">Filtrée (EMA)</div>
-                <div class="stat-value" style="color: #888;" id="filteredTempDisplay">--°C</div>
+                <div class="stat-label">Brute (capteur)</div>
+                <div class="stat-value" style="color: #aaa;" id="filteredTempDisplay">--°C</div>
             </div>
         </div>
         <!-- Timings -->
@@ -300,10 +322,16 @@
             <div class="status-cell">
                 <div class="stat-label" style="color: #FF8C00;">Rampe écoulée</div>
                 <div class="stat-value" style="color: #FF8C00;" id="rampElapsed">--:--</div>
+                <div id="rampRateDisplay" style="font-size: 0.75em; color: #FF8C00; opacity: 0; cursor: pointer; user-select: none;" onclick="cycleRampUnit()"></div>
             </div>
             <div class="status-cell">
                 <div class="stat-label" style="color: #4CAF50;">Maintien restant</div>
                 <div class="stat-value" style="color: #4CAF50;" id="holdRemaining">--:--</div>
+            </div>
+            <div class="status-cell">
+                <div class="stat-label" style="color: #7E57C2;">Fin estimée</div>
+                <div class="stat-value" style="color: #7E57C2;" id="estimatedFinish">--:--</div>
+                <div id="estimatedRemaining" style="font-size: 0.75em; color: #7E57C2; opacity: 0.7;">reste --</div>
             </div>
         </div>
         <!-- SSR / puissance -->
@@ -360,7 +388,11 @@
         <div class="graph-legend" style="margin-top: 10px;">
             <div class="legend-item">
                 <div class="legend-color" style="background:#4CAF50"></div>
-                <span>Température mesurée</span>
+                <span>Température filtrée (EMA)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background:#bbb; border: 2px dashed #bbb; height:0"></div>
+                <span>Température brute (capteur)</span>
             </div>
             <div class="legend-item">
                 <div class="legend-color" style="background:#2196F3"></div>
@@ -404,6 +436,64 @@
         let blockViewTimer = null; // Timer for block view animation (v1.5.0)
         // Prevent telemetry from overwriting user's slider while editing
         let userEditingInterval = false;
+
+        // Ramp rate unit selector (persisted in localStorage)
+        let rampUnit = localStorage.getItem('rampUnit') || 'degC_min';
+
+        function cycleRampUnit() {
+            const units = ['degC_min', 'degC_h', 'degF_min', 'degF_h'];
+            rampUnit = units[(units.indexOf(rampUnit) + 1) % units.length];
+            localStorage.setItem('rampUnit', rampUnit);
+        }
+
+        function formatRampRate(ratePerMin) {
+            if (!ratePerMin || ratePerMin <= 0) return '';
+            let value, unit;
+            switch (rampUnit) {
+                case 'degC_min': value = ratePerMin;              unit = '°C/min'; break;
+                case 'degC_h':   value = ratePerMin * 60;         unit = '°C/h';   break;
+                case 'degF_min': value = ratePerMin * 9 / 5;      unit = '°F/min'; break;
+                case 'degF_h':   value = ratePerMin * 60 * 9 / 5; unit = '°F/h';   break;
+                default:         value = ratePerMin;              unit = '°C/min';
+            }
+            return value.toFixed(value < 10 ? 1 : 0) + ' ' + unit + ' ▸';
+        }
+
+        function calculateRemainingMinutes(data) {
+            if (!data.programSteps || !data.programSteps.length || !data.programStep) return null;
+            const stepIdx = data.programStep - 1;
+            const phase   = data.phase || 'IDLE';
+            let remaining = 0;
+
+            const step = data.programSteps[stepIdx];
+            if (step) {
+                if (phase === 'RAMP') {
+                    if (step.withRamp && step.rampRate > 0) {
+                        remaining += Math.abs(step.targetTemp - (data.target || 0)) / step.rampRate;
+                    } else {
+                        const dT = Math.abs(step.targetTemp - (data.target || 0));
+                        remaining += dT / ((step.targetTemp > (data.target || 0)) ? estimatedHeatingRate : estimatedCoolingRate);
+                    }
+                }
+                remaining += (data.holdRemainingSeconds || 0) / 60;
+            }
+
+            let prevTemp = step ? step.targetTemp : 0;
+            for (let i = stepIdx + 1; i < data.programSteps.length; i++) {
+                const s = data.programSteps[i];
+                const dT = s.targetTemp - prevTemp;
+                let rampDur = 0;
+                if (s.withRamp && s.rampRate > 0) {
+                    rampDur = Math.abs(dT) / s.rampRate;
+                } else {
+                    rampDur = Math.abs(dT) / (dT > 0 ? estimatedHeatingRate : estimatedCoolingRate);
+                }
+                if (rampDur > 0) rampDur += estimatedStabilizationTime;
+                remaining += rampDur + (s.holdTime || 0);
+                prevTemp = s.targetTemp;
+            }
+            return remaining;
+        }
 
         // Format seconds to MM:SS or HH:MM:SS
         function formatTime(seconds) {
@@ -673,6 +763,7 @@
             // Find min/max temperatures and time range
             // Filter out invalid values (NaN, undefined, null) before calculating min/max
             const temps = tempHistory.map(d => d.temp)
+                .concat(tempHistory.map(d => d.filteredTemp))
                 .concat(targetHistory.map(d => d.target))
                 .filter(t => typeof t === 'number' && !isNaN(t) && isFinite(t) && t >= 0 && t <= 1000);
             
@@ -848,7 +939,26 @@
                 ctx.stroke();
             }
 
-            // Draw current temperature line (solid green)
+            // Draw raw temperature line (thin grey — bruit de mesure)
+            if (tempHistory.length > 1) {
+                ctx.strokeStyle = '#bbb';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                let firstPoint = true;
+                tempHistory.forEach(d => {
+                    if (d.time >= minTime && d.time <= maxTime) {
+                        const x = timeToX(d.time);
+                        const y = tempToY(d.temp);
+                        if (firstPoint) { ctx.moveTo(x, y); firstPoint = false; }
+                        else            { ctx.lineTo(x, y); }
+                    }
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Draw filtered temperature line (solid green — signal EMA)
             if (tempHistory.length > 1) {
                 ctx.strokeStyle = '#4CAF50';
                 ctx.lineWidth = 3;
@@ -856,14 +966,14 @@
                 let firstPoint = true;
                 let drawnPoints = 0;
                 tempHistory.forEach((d, i) => {
-                    // Only draw points within visible window
+                    const fTemp = typeof d.filteredTemp === 'number' ? d.filteredTemp : d.temp;
                     if (d.time >= minTime && d.time <= maxTime) {
                         const x = timeToX(d.time);
-                        const y = tempToY(d.temp);
+                        const y = tempToY(fTemp);
                         if (firstPoint) {
                             ctx.moveTo(x, y);
                             firstPoint = false;
-                            console.log('[DRAW] Temp FIRST point:', d.time.toFixed(1) + 's', d.temp.toFixed(1) + '°C', '→ x:', x.toFixed(0), 'y:', y.toFixed(0));
+                            console.log('[DRAW] Filtered FIRST point:', d.time.toFixed(1) + 's', fTemp.toFixed(1) + '°C', '→ x:', x.toFixed(0), 'y:', y.toFixed(0));
                         } else {
                             ctx.lineTo(x, y);
                         }
@@ -871,15 +981,16 @@
                     }
                 });
                 ctx.stroke();
-                console.log('[DRAW] Temp curve: drew', drawnPoints, '/', tempHistory.length, 'points');
+                console.log('[DRAW] Filtered curve: drew', drawnPoints, '/', tempHistory.length, 'points');
             }
 
-            // Draw current point marker
+            // Draw current point marker (filtered temperature)
             if (tempHistory.length > 0) {
                 const lastData = tempHistory[tempHistory.length - 1];
                 const x = timeToX(lastData.time);
-                const y = tempToY(lastData.temp);
-                
+                const fTemp = typeof lastData.filteredTemp === 'number' ? lastData.filteredTemp : lastData.temp;
+                const y = tempToY(fTemp);
+
                 ctx.fillStyle = '#4CAF50';
                 ctx.beginPath();
                 ctx.arc(x, y, 5, 0, 2 * Math.PI);
@@ -1409,7 +1520,7 @@
                 window.programStartTemp = parseFloat(localStorage.getItem('programStartTemp'));
                 console.log('[GRAPH] Restored programStartTemp from localStorage: ' + window.programStartTemp.toFixed(1) + '°C');
             }
-            const programStartTempForScale = window.programStartTemp || currentFurnaceTemp;
+            const programStartTempForScale = window.programStartTemp || 25;
             const programTemps = programSteps.map(s => s.targetTemp).filter(t => typeof t === 'number' && !isNaN(t));
             const allTemps = programTemps.concat([programStartTempForScale]);
             let minTemp = Math.min(...allTemps);
@@ -1529,9 +1640,11 @@
 
             // Draw blocks
             let currentX = padding.left;
-            // Use program start temperature, NOT current temperature
-            // This ensures previousTemp tracks the PLANNED path, not actual temp
-            let previousTemp = window.programStartTemp || currentFurnaceTemp;
+            // Use program start temperature, NOT current temperature.
+            // Fallback to 25°C (ambient) if unknown — never use currentFurnaceTemp which
+            // would make step 0 appear as a cooling block when the page loads mid-program
+            // on a device that hasn't stored programStartTemp in localStorage.
+            let previousTemp = window.programStartTemp || 25;
 
             programSteps.forEach((step, stepIndex) => {
                 const startTemp = previousTemp;
@@ -1812,9 +1925,10 @@
 
                     // Update temperature displays
                     if (typeof data.temp === 'number') {
-                        const color = getTempColor(data.temp, data.phase || 'IDLE', data.target || 0);
+                        const fTemp = typeof data.filteredTemp === 'number' ? data.filteredTemp : data.temp;
+                        const color = getTempColor(fTemp, data.phase || 'IDLE', data.target || 0);
                         const el = document.getElementById('currentTemp');
-                        el.textContent = data.temp.toFixed(1) + '°C';
+                        el.textContent = fTemp.toFixed(1) + '°C';
                         el.style.color = color;
                         
                         // Store for block view (v1.5.0)
@@ -1841,7 +1955,8 @@
                             const clientElapsedSeconds = (now - clientStartTime) / 1000;
                             
                             // Add to history with client timestamp (accurate to browser refresh rate)
-                            tempHistory.push({time: clientElapsedSeconds, temp: data.temp});
+                            tempHistory.push({time: clientElapsedSeconds, temp: data.temp,
+                                filteredTemp: typeof data.filteredTemp === 'number' ? data.filteredTemp : data.temp});
                             if (tempHistory.length > MAX_HISTORY) {
                                 tempHistory.shift();
                                 targetHistory.shift();
@@ -1853,8 +1968,8 @@
                         }
                     }
                     
-                    if (typeof data.filteredTemp === 'number') {
-                        document.getElementById('filteredTempDisplay').textContent = data.filteredTemp.toFixed(1) + '°C';
+                    if (typeof data.temp === 'number') {
+                        document.getElementById('filteredTempDisplay').textContent = data.temp.toFixed(1) + '°C';
                     }
 
                     if (typeof data.target === 'number') {
@@ -1995,6 +2110,32 @@
                             holdEl.style.opacity = '0.4';
                         }
 
+                        // Ramp rate display with unit selector
+                        const rampRateEl = document.getElementById('rampRateDisplay');
+                        const currentStepData = data.programSteps && data.programStep
+                            ? data.programSteps[data.programStep - 1] : null;
+                        if (currentStepData && data.phase === 'RAMP' &&
+                            currentStepData.withRamp && currentStepData.rampRate > 0) {
+                            rampRateEl.textContent = formatRampRate(currentStepData.rampRate);
+                            rampRateEl.style.opacity = '1';
+                        } else {
+                            rampRateEl.textContent = '';
+                            rampRateEl.style.opacity = '0';
+                        }
+
+                        // Estimated finish time
+                        const remainingMin = calculateRemainingMinutes(data);
+                        if (remainingMin !== null && remainingMin >= 0) {
+                            const finishDate = new Date(Date.now() + remainingMin * 60000);
+                            const hh = finishDate.getHours().toString().padStart(2, '0');
+                            const mm = finishDate.getMinutes().toString().padStart(2, '0');
+                            document.getElementById('estimatedFinish').textContent = hh + ':' + mm;
+                            document.getElementById('estimatedRemaining').textContent = 'reste ' + formatTime(remainingMin * 60);
+                        } else {
+                            document.getElementById('estimatedFinish').textContent = '--:--';
+                            document.getElementById('estimatedRemaining').textContent = 'reste --';
+                        }
+
                         startBtn.disabled = true;
                         stopBtn.disabled = false;
                     } else {
@@ -2005,6 +2146,10 @@
                         document.getElementById('holdRemaining').textContent = '--:--';
                         document.getElementById('rampElapsed').style.opacity = '0.4';
                         document.getElementById('holdRemaining').style.opacity = '0.4';
+                        document.getElementById('rampRateDisplay').textContent = '';
+                        document.getElementById('rampRateDisplay').style.opacity = '0';
+                        document.getElementById('estimatedFinish').textContent = '--:--';
+                        document.getElementById('estimatedRemaining').textContent = 'reste --';
 
                         startBtn.disabled = false;
                         stopBtn.disabled = true;
@@ -2035,6 +2180,17 @@
                             document.getElementById('pidKdInput').value = data.pidKd;
                         }
                     }
+
+                    // Read-only firmware params (always update)
+                    if (typeof data.tempFilterAlpha === 'number') {
+                        document.getElementById('alphaDisplay').textContent = data.tempFilterAlpha.toFixed(2);
+                    }
+                    if (typeof data.updateInterval === 'number') {
+                        document.getElementById('logIntervalDisplay').textContent = (data.updateInterval / 1000).toFixed(1) + 's';
+                    }
+                    if (data.version) {
+                        document.getElementById('firmwareVersionDisplay').textContent = data.version;
+                    }
                     
                     // Redraw graph (throttled to once per second)
                     // CRITICAL: drawGraphs() MUST be called AFTER all telemetry updates above
@@ -2060,7 +2216,8 @@
             .then(s => {
                 if (typeof s.temp === 'number') {
                     document.getElementById('currentTemp').textContent = s.temp.toFixed(1) + '°C';
-                    tempHistory.push({time: s.totalElapsedSeconds || 0, temp: s.temp});
+                    tempHistory.push({time: s.totalElapsedSeconds || 0, temp: s.temp,
+                        filteredTemp: typeof s.filteredTemp === 'number' ? s.filteredTemp : s.temp});
                 }
                 if (typeof s.target === 'number') {
                     document.getElementById('targetTemp').textContent = s.target.toFixed(1) + '°C';
@@ -2087,12 +2244,24 @@
                 if (typeof s.pidKd === 'number') {
                     document.getElementById('pidKdInput').value = s.pidKd;
                 }
-                if (typeof s.filteredTemp === 'number') {
-                    document.getElementById('filteredTempDisplay').textContent = s.filteredTemp.toFixed(1) + '°C';
+                // Initialize read-only firmware params
+                if (typeof s.tempFilterAlpha === 'number') {
+                    document.getElementById('alphaDisplay').textContent = s.tempFilterAlpha.toFixed(2);
+                }
+                if (typeof s.updateInterval === 'number') {
+                    document.getElementById('logIntervalDisplay').textContent = (s.updateInterval / 1000).toFixed(1) + 's';
+                }
+                if (s.version) {
+                    document.getElementById('firmwareVersionDisplay').textContent = s.version;
+                }
+                if (typeof s.temp === 'number') {
+                    document.getElementById('filteredTempDisplay').textContent = s.temp.toFixed(1) + '°C';
                 }
                 if (s.phase) updatePhaseBadge(s.phase);
-                if (typeof s.temp === 'number' && s.phase) {
-                    document.getElementById('currentTemp').style.color = getTempColor(s.temp, s.phase, s.target || 0);
+                if (typeof s.filteredTemp === 'number' && s.phase) {
+                    const fTemp = s.filteredTemp;
+                    document.getElementById('currentTemp').textContent = fTemp.toFixed(1) + '°C';
+                    document.getElementById('currentTemp').style.color = getTempColor(fTemp, s.phase, s.target || 0);
                 }
                 document.getElementById('programStatus').textContent = s.program ? (s.programName || 'En cours') : 'Arrêté';
                 updateSSRDisplay(s.ssr1, s.ssr2);
@@ -2271,6 +2440,6 @@
             }
         };
     </script>
-    <div class="build-footer">Build: v1.6.1r20 - 2026-05-13</div>
+    <div class="build-footer">Build: v1.7.0 - 2026-05-15</div>
 </body>
 </html>

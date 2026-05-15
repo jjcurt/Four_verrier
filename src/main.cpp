@@ -86,7 +86,13 @@ double currentTemp  = 0.0;
 double targetTemp   = 0.0;
 double pidOutput    = 0.0;
 double filteredTemp = 0.0;
-float  tempFilterAlpha = 0.8f;
+float  tempFilterAlpha = 0.4f; // EMA étage 2 (après MA) — 0.4 recommandé avec TEMP_MA_WINDOW=7
+
+// Buffer filtre MA (moyenne glissante étage 1)
+static double maBuffer[TEMP_MA_WINDOW] = {};
+static double maSum    = 0.0;
+static int    maIdx    = 0;
+static bool   maFilled = false;
 
 // PID
 double pidKp = 40.0, pidKi = 0.1, pidKd = 4.0;
@@ -130,6 +136,7 @@ bool disablePidReset = false;
 String         currentProgramName = "Idle";
 int            programStep        = 0;
 unsigned long  programStartMs     = 0;
+double         programStartTemp   = 0.0; // Température au démarrage du programme (pour block view multi-device)
 FiringProgram  currentProgram     = {};
 bool           programLoaded      = false;
 bool           programRunning     = false;
@@ -234,21 +241,33 @@ void loop()
         rawTemp     = thermocouple.readCelsius();
         currentTemp = rawTemp;
 
-        // Filtre EMA (double — utilisé directement par le PID)
+        // Filtre étage 1 : moyenne glissante MA(TEMP_MA_WINDOW) avec somme courante O(1)
+        maSum -= maBuffer[maIdx];
+        maBuffer[maIdx] = currentTemp;
+        maSum += currentTemp;
+        maIdx = (maIdx + 1) % TEMP_MA_WINDOW;
+        if (maIdx == 0) maFilled = true;
+        int    maCount = maFilled ? TEMP_MA_WINDOW : (maIdx == 0 ? TEMP_MA_WINDOW : maIdx);
+        double maTemp  = maSum / maCount;
+
+        // Filtre étage 2 : EMA légère sur la moyenne (α = tempFilterAlpha)
         filteredTemp = (filteredTemp == 0.0)
-            ? currentTemp
-            : (tempFilterAlpha * currentTemp + (1.0 - tempFilterAlpha) * filteredTemp);
+            ? maTemp
+            : (tempFilterAlpha * maTemp + (1.0 - tempFilterAlpha) * filteredTemp);
 
         lastTempRead = millis();
 
-        // Buffer graphe circulaire
-        tempSamples[tempSampleIdx++] = (float)currentTemp;
+        // Buffer graphe circulaire (température filtrée pour TFT idle graph)
+        tempSamples[tempSampleIdx++] = (float)filteredTemp;
         if (tempSampleIdx >= GRAPH_W) { tempSampleIdx = 0; tempSamplesFilled = true; }
 
         // Sécurité température
-        if (currentTemp < MIN_TEMP || currentTemp > MAX_TEMP)
+        // NaN + MIN sur valeur brute : détection immédiate de défaut capteur
+        // MAX sur valeur filtrée : résistant aux pics de bruit near the limit
+        if (isnan(currentTemp) || currentTemp < MIN_TEMP || filteredTemp > MAX_TEMP)
         {
-            DEBUG_PRINTLN("Temperature out of range — safety shutoff");
+            DEBUG_PRINTF("Temperature safety shutoff: raw=%.1f filtered=%.1f\n",
+                         currentTemp, filteredTemp);
             RelaySerial::setRelay(1, false);
             RelaySerial::setRelay(2, false);
             return;

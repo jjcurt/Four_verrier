@@ -14,7 +14,7 @@
 
 // Firmware version (injectée par PlatformIO via build_flags si disponible)
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "1.6.1r21"
+#define FIRMWARE_VERSION "1.7.0r1"
 #endif
 
 // --- Serveur web ---
@@ -25,6 +25,11 @@
 #define MIN_TEMP 0              // Température minimale de lecture (°C)
 #define TEMP_READ_INTERVAL 1000 // Intervalle de lecture de la sonde (ms)
 #define PID_INTERVAL 1000       // Intervalle de calcul PID (ms)
+
+// Filtre température : moyenne glissante (étage 1) + EMA (étage 2)
+// MA(7) réduit le bruit de quantification MAX31855 d'un facteur √7 ≈ 2.6×
+// tempFilterAlpha (settings.json) contrôle l'EMA de lissage final (~0.4 recommandé)
+#define TEMP_MA_WINDOW 7
 
 // --- Répertoires SD card ---
 #define SD_PROGRAMS_DIR "/programs"

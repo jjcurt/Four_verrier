@@ -202,7 +202,8 @@ void executeProgramStep()
     case PHASE_RAMP:
     {
         float elapsedMin = (now - phaseStartMs) / 60000.0f;
-        float newTarget  = rampStartTemp + step.rampRate * elapsedMin;
+        float sign       = (step.targetTemp >= rampStartTemp) ? 1.0f : -1.0f;
+        float newTarget  = rampStartTemp + sign * fabsf(step.rampRate) * elapsedMin;
 
         bool rampDone = (step.targetTemp >= rampStartTemp)
                         ? (newTarget >= step.targetTemp)

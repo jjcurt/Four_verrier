@@ -52,6 +52,8 @@ extern unsigned long  effectiveHoldStartMs;
 extern bool           isStabilizing;
 extern unsigned long  stabilizingStartMs;
 extern bool           initialBoost;
+extern float          tempFilterAlpha;
+extern double         programStartTemp;
 
 // ---------------------------------------------------------------------------
 // isDataLogActive
@@ -118,6 +120,34 @@ void startDataLog(const String &programName)
         currentLogType = LOG_NONE;
         return;
     }
+
+    // Ligne 1 : identification (firmware, programme, timestamp ISO, température de départ)
+    char isoStart[32];
+    strftime(isoStart, sizeof(isoStart), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+    dataLogFile.printf("# FIRMWARE:%s PROGRAM:%s START:%s STARTTEMP:%.1f\n",
+                       FIRMWARE_VERSION, currentProgram.name, isoStart, programStartTemp);
+
+    // Ligne 2 : paramètres d'exécution + résumé des étapes
+    dataLogFile.printf("# KP:%.2f KI:%.3f KD:%.3f EMA:%.2f BOOST:%d PIDRESET:%d"
+                       " INTERVAL:%lu ADAPTIVE:%d STEPS:%d",
+                       pidKp, pidKi, pidKd,
+                       tempFilterAlpha,
+                       currentProgram.enableBoost     ? 1 : 0,
+                       currentProgram.disablePidReset ? 1 : 0,
+                       currentProgram.dataLogInterval,
+                       currentProgram.adaptiveLogging ? 1 : 0,
+                       currentProgram.numSteps);
+    dataLogFile.print(" [");
+    for (uint8_t i = 0; i < currentProgram.numSteps; i++)
+    {
+        const ProgramStep &s = currentProgram.steps[i];
+        if (i > 0) dataLogFile.print(",");
+        if (s.withRamp && s.rampRate > 0.0f)
+            dataLogFile.printf("%.0f@%.1f/%lu", s.targetTemp, s.rampRate, (unsigned long)s.holdTime);
+        else
+            dataLogFile.printf("%.0f@0/%lu",    s.targetTemp,              (unsigned long)s.holdTime);
+    }
+    dataLogFile.println("]");
 
     // En-tête CSV selon le type
     switch (currentLogType)

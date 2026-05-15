@@ -46,6 +46,7 @@ extern String currentProgramName;
 extern FiringProgram currentProgram;
 extern ProgramPhase currentPhase;
 extern unsigned long programStartMs;
+extern double        programStartTemp;
 extern unsigned long phaseStartMs;
 extern unsigned long stepStartMs;
 extern unsigned long effectiveHoldStartMs;
@@ -81,6 +82,7 @@ String buildStatusJson()
     unsigned long now = millis();
     unsigned long elapsedMs = programRunning ? (now - programStartMs) : 0;
     doc["totalElapsedSeconds"] = elapsedMs / 1000;
+    if (programRunning) doc["programStartTemp"] = programStartTemp;
     doc["elapsedSeconds"]      = elapsedMs / 1000; // alias pour compatibilité
 
     unsigned long stepElapsedMs = (programRunning && phaseStartMs > 0) ? (now - phaseStartMs) : 0;
@@ -453,6 +455,7 @@ void setupWebServer()
                 programRunning      = true;
                 currentProgramName  = program;
                 programStartMs      = millis();
+                programStartTemp    = currentTemp;
                 currentProgram.currentStep = 0;
                 initialBoost        = ((currentProgram.steps[0].targetTemp - currentTemp) > 50.0f);
 

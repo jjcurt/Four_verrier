@@ -11,6 +11,7 @@ Usage:
 import re
 import sys
 import json
+import shutil
 import sqlite3
 import argparse
 from datetime import datetime, timezone
@@ -18,8 +19,10 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH  = Path(__file__).parent / "db" / "kiln.db"
-LOGS_DIR = Path(__file__).parent / "logs"
+DB_PATH       = Path(__file__).parent / "db" / "kiln.db"
+LOGS_DIR      = Path(__file__).parent / "logs"
+PHOTOS_DIR    = Path(__file__).parent / "photos"
+PROGRAMS_DIR  = Path(__file__).parent.parent / "data" / "programs"
 
 # ---------------------------------------------------------------------------
 # Schéma
@@ -30,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     filename           TEXT    UNIQUE NOT NULL,
     log_type           TEXT,       -- 'user' | 'test' | 'maintenance' | 'unknown'
     program_name       TEXT,
+    firing_type        TEXT,       -- id depuis firing_types.json (ex: 'bouteilles')
     start_datetime     TEXT,       -- ISO8601
     start_temp         REAL,
     firmware_version   TEXT,
@@ -46,6 +50,16 @@ CREATE TABLE IF NOT EXISTS sessions (
     notes              TEXT,       -- annotation manuelle
     imported_at        TEXT        -- ISO8601
 );
+
+CREATE TABLE IF NOT EXISTS photos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    filename    TEXT    NOT NULL,
+    caption     TEXT,
+    added_at    TEXT                -- ISO8601
+);
+
+CREATE INDEX IF NOT EXISTS idx_photos_session ON photos(session_id);
 
 CREATE TABLE IF NOT EXISTS datapoints (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,6 +94,29 @@ CREATE TABLE IF NOT EXISTS datapoints (
 CREATE INDEX IF NOT EXISTS idx_dp_session ON datapoints(session_id);
 CREATE INDEX IF NOT EXISTS idx_dp_elapsed ON datapoints(session_id, elapsed_sec);
 """
+
+# ---------------------------------------------------------------------------
+# Migration (ajout de colonnes sur base existante)
+# ---------------------------------------------------------------------------
+
+def migrate(conn: sqlite3.Connection):
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    if 'firing_type' not in existing:
+        conn.execute("ALTER TABLE sessions ADD COLUMN firing_type TEXT")
+        conn.commit()
+
+    # Table photos (créée par SCHEMA IF NOT EXISTS, mais au cas où base très ancienne)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS photos (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id  INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            filename    TEXT    NOT NULL,
+            caption     TEXT,
+            added_at    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_photos_session ON photos(session_id);
+    """)
+
 
 # ---------------------------------------------------------------------------
 # Parseurs de métadonnées
@@ -129,6 +166,20 @@ def detect_log_type(filename: str) -> str:
     return "unknown"
 
 
+def read_program_type(program_name: str) -> str | None:
+    """Tente de lire le champ 'type' dans data/programs/<program_name>.json."""
+    if not program_name:
+        return None
+    for candidate in [program_name, program_name.lower()]:
+        p = PROGRAMS_DIR / f"{candidate}.json"
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8")).get("type")
+            except Exception:
+                return None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Ingestion d'un fichier
 # ---------------------------------------------------------------------------
@@ -148,18 +199,22 @@ def ingest_file(csv_path: Path, conn: sqlite3.Connection) -> bool:
     def flt(key): return float(meta[key]) if key in meta else None
     def iit(key): return int(meta[key])   if key in meta else None
 
+    program_name = meta.get('PROGRAM')
+    firing_type  = read_program_type(program_name)
+
     now_iso = datetime.now(timezone.utc).isoformat()
     cur = conn.execute("""
         INSERT INTO sessions
-            (filename, log_type, program_name, start_datetime, start_temp,
+            (filename, log_type, program_name, firing_type, start_datetime, start_temp,
              firmware_version, kp, ki, kd, ema_alpha,
              boost_enabled, pid_reset_disabled,
              log_interval_ms, adaptive_logging,
              num_steps, steps_json, imported_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         filename, log_type,
-        meta.get('PROGRAM'), meta.get('START'),
+        program_name, firing_type,
+        meta.get('START'),
         flt('STARTTEMP'), meta.get('FIRMWARE'),
         flt('KP'), flt('KI'), flt('KD'), flt('EMA'),
         iit('BOOST'), iit('PIDRESET'),
@@ -251,25 +306,67 @@ def list_sessions(conn: sqlite3.Connection):
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Commande --photos-for
 # ---------------------------------------------------------------------------
+
+def add_photos(session_id: int, photo_paths: list[Path], caption: str | None,
+               conn: sqlite3.Connection):
+    row = conn.execute("SELECT id FROM sessions WHERE id=?", (session_id,)).fetchone()
+    if not row:
+        print(f"Session {session_id} introuvable en base.")
+        return
+
+    dest_dir = PHOTOS_DIR / f"session_{session_id}"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for src in photo_paths:
+        dest = dest_dir / src.name
+        shutil.copy2(src, dest)
+        conn.execute(
+            "INSERT INTO photos (session_id, filename, caption, added_at) VALUES (?,?,?,?)",
+            (session_id, src.name, caption, now_iso),
+        )
+        print(f"  [photo] {src.name} → {dest}")
+    conn.commit()
+    print(f"{len(photo_paths)} photo(s) associée(s) à la session {session_id}.")
+
 
 def main():
     parser = argparse.ArgumentParser(
         description="Ingestion CSV four verrier → SQLite",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Exemples :
+  python ingest.py                            # scanne logs/ pour les nouveaux fichiers
+  python ingest.py path/to/file.csv           # ingère un fichier spécifique
+  python ingest.py --list                     # liste les sessions en base
+  python ingest.py --photos-for 3 a.jpg b.jpg --caption "Résultat final"
+""",
     )
     parser.add_argument("files", nargs="*", help="Fichiers CSV (défaut : scan logs/)")
     parser.add_argument("--list", "-l", action="store_true", help="Liste les sessions en base")
+    parser.add_argument("--photos-for", metavar="SESSION_ID", type=int,
+                        help="Associe des photos à une session (id entier)")
+    parser.add_argument("--caption", metavar="TEXTE", help="Légende commune pour les photos")
     args = parser.parse_args()
 
     DB_PATH.parent.mkdir(exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    migrate(conn)
 
     if args.list:
         list_sessions(conn)
+        conn.close()
+        return
+
+    if args.photos_for is not None:
+        if not args.files:
+            print("Précisez au moins un fichier photo après --photos-for SESSION_ID.")
+            conn.close()
+            return
+        add_photos(args.photos_for, [Path(f) for f in args.files], args.caption, conn)
         conn.close()
         return
 

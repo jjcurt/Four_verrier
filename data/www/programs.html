@@ -302,6 +302,35 @@
         .editor-mode.active {
             display: block;
         }
+        .type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+            background: #e3f2fd;
+            color: #1565c0;
+            margin-left: 8px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .filter-bar label {
+            font-weight: bold;
+            color: #333;
+            white-space: nowrap;
+        }
+        .filter-bar select {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -327,6 +356,7 @@
                     <p><strong>Champs du programme :</strong></p>
                     <ul style="margin: 10px 0; padding-left: 20px;">
                         <li><code>name</code>: Nom du programme</li>
+                        <li><code>type</code> (optionnel): Type de cuisson (ex: <code>"bouteilles"</code>, <code>"fusing_simple"</code>…) — taxonomie dans <code>/config/firing_types.json</code></li>
                         <li><code>numSteps</code>: Nombre d'étapes</li>
                         <li><code>manualMode</code> (optionnel): true pour mode manuel (boucle ouverte, PID désactivé)</li>
                         <li><code>manualPWM</code> (optionnel): PWM fixe 0-1023 en mode manuel</li>
@@ -400,6 +430,13 @@
                 </div>
             </div>
 
+            <div class="filter-bar" id="filterBar" style="display:none;">
+                <label for="filterType">Filtrer par type :</label>
+                <select id="filterType" onchange="renderPrograms()">
+                    <option value="">Tous les types</option>
+                </select>
+            </div>
+
             <ul class="program-list" id="programList">
                 <li class="empty-state">Chargement des programmes...</li>
             </ul>
@@ -433,7 +470,15 @@
                             <input type="text" id="progName" required placeholder="Ex: Cuisson_Emaux_520C">
                             <div class="help-text">Le nom sera utilisé pour le fichier (extension .json ajoutée automatiquement)</div>
                         </div>
-                        
+
+                        <div class="form-group">
+                            <label for="progType">Type de cuisson</label>
+                            <select id="progType">
+                                <option value="">— Non spécifié —</option>
+                            </select>
+                            <div class="help-text">Taxonomie chargée depuis /config/firing_types.json sur la carte SD</div>
+                        </div>
+
                         <div class="form-row">
                             <div class="form-group">
                                 <label>
@@ -610,8 +655,44 @@
     </div>
 
     <script>
-        let programs = [];
+        let programs = [];      // array of {name, type}
+        let firingTypes = [];   // array of {id, label} from firing_types.json
         let stepCounter = 0;
+
+        async function loadFiringTypes() {
+            try {
+                const res = await fetch('/download?path=/config/firing_types.json');
+                if (!res.ok) return;
+                const data = await res.json();
+                firingTypes = data.types || [];
+
+                // Populate filter select
+                const filterSel = document.getElementById('filterType');
+                firingTypes.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = t.label;
+                    filterSel.appendChild(opt);
+                });
+
+                // Populate form type select
+                const progTypeSel = document.getElementById('progType');
+                firingTypes.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = t.label;
+                    progTypeSel.appendChild(opt);
+                });
+            } catch (e) {
+                console.warn('firing_types.json non chargé:', e);
+            }
+        }
+
+        function getTypeLabel(typeId) {
+            if (!typeId) return null;
+            const t = firingTypes.find(f => f.id === typeId);
+            return t ? t.label : typeId;
+        }
 
         // Toggle between form and JSON editor modes
         function switchEditorMode(mode) {
@@ -708,6 +789,10 @@
                 name: document.getElementById('progName').value.trim(),
                 numSteps: 0
             };
+
+            // Firing type (optional)
+            const progType = document.getElementById('progType').value;
+            if (progType) program.type = progType;
 
             // Manual mode
             if (document.getElementById('manualMode').checked) {
@@ -853,9 +938,11 @@
             }
         }
 
-        // Initialize with one step
-        window.addEventListener('load', function() {
+        // Initialize with one step and load types before programs
+        window.addEventListener('load', async function() {
             addStep();
+            await loadFiringTypes();
+            loadPrograms();
         });
 
 
@@ -863,34 +950,64 @@
             try {
                 const res = await fetch('/api/programs');
                 const allFiles = await res.json();
-                // Filter to show only .json files
-                programs = allFiles.filter(name => name.toLowerCase().endsWith('.json'));
+                const jsonFiles = allFiles.filter(name => name.toLowerCase().endsWith('.json'));
+
+                // Fetch each program JSON to read its type field
+                const fetched = await Promise.allSettled(
+                    jsonFiles.map(name =>
+                        fetch(`/download?path=/programs/${encodeURIComponent(name)}`)
+                            .then(r => r.ok ? r.json() : {})
+                            .catch(() => ({}))
+                    )
+                );
+
+                programs = jsonFiles.map((name, i) => {
+                    const data = fetched[i].status === 'fulfilled' ? fetched[i].value : {};
+                    return { name, type: data.type || '' };
+                });
+
+                // Show filter bar only if types are available and at least one program has a type
+                const hasTypes = firingTypes.length > 0;
+                document.getElementById('filterBar').style.display = hasTypes ? 'flex' : 'none';
+
                 renderPrograms();
             } catch (e) {
                 console.error('Failed to load programs:', e);
-                document.getElementById('programList').innerHTML = 
+                document.getElementById('programList').innerHTML =
                     '<li class="empty-state">❌ Erreur de chargement des programmes</li>';
             }
         }
 
         function renderPrograms() {
             const list = document.getElementById('programList');
-            
-            if (programs.length === 0) {
-                list.innerHTML = '<li class="empty-state">Aucun programme disponible. Créez-en un ou téléversez un fichier JSON.</li>';
+            const filterVal = document.getElementById('filterType').value;
+
+            const visible = filterVal
+                ? programs.filter(p => p.type === filterVal)
+                : programs;
+
+            if (visible.length === 0) {
+                list.innerHTML = programs.length === 0
+                    ? '<li class="empty-state">Aucun programme disponible. Créez-en un ou téléversez un fichier JSON.</li>'
+                    : '<li class="empty-state">Aucun programme pour ce type de cuisson.</li>';
                 return;
             }
 
-            list.innerHTML = programs.map(name => `
+            list.innerHTML = visible.map(p => {
+                const displayName = escapeHtml(p.name.replace(/\.json$/i, ''));
+                const badge = p.type
+                    ? `<span class="type-badge">${escapeHtml(getTypeLabel(p.type) || p.type)}</span>`
+                    : '';
+                return `
                 <li class="program-item">
-                    <span class="program-name">${escapeHtml(name.replace(/\.json$/i, ''))}</span>
+                    <span class="program-name">${displayName}${badge}</span>
                     <div class="program-actions">
-                        <button class="button" onclick="viewProgram('${escapeHtml(name)}')">👁️ Voir</button>
-                        <a class="button" href="/download?path=/programs/${encodeURIComponent(name)}" download>⬇️ Télécharger</a>
-                        <button class="button button-danger" onclick="deleteProgram('${escapeHtml(name)}')">🗑️ Supprimer</button>
+                        <button class="button" onclick="viewProgram('${escapeHtml(p.name)}')">👁️ Voir</button>
+                        <a class="button" href="/download?path=/programs/${encodeURIComponent(p.name)}" download>⬇️ Télécharger</a>
+                        <button class="button button-danger" onclick="deleteProgram('${escapeHtml(p.name)}')">🗑️ Supprimer</button>
                     </div>
-                </li>
-            `).join('');
+                </li>`;
+            }).join('');
         }
 
         async function deleteProgram(name) {
@@ -1003,9 +1120,6 @@
             div.textContent = text;
             return div.innerHTML;
         }
-
-        // Load programs on page load
-        loadPrograms();
     </script>
     
     <script>
@@ -1019,6 +1133,6 @@
         }
     </script>
     
-    <div class="build-footer">Build: v1.7.0 - 2026-05-15</div>
+    <div class="build-footer">Build: v1.7.0 - 2026-05-17</div>
 </body>
 </html>

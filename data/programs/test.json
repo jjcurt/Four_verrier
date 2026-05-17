@@ -1,5 +1,6 @@
 {
     "name": "test",
+    "type": "fusing_simple",
     "numSteps": 2,
     "enableDataLog": true,
     "steps": [

@@ -1,5 +1,6 @@
 {
   "name": "Bouteilles_1_NoReset",
+  "type": "bouteilles",
   "enableMaintenanceLog": true,
   "adaptiveLogging": true,
   "adaptiveTempDelta": 1,

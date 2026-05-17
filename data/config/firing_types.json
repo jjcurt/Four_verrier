@@ -1,0 +1,10 @@
+{
+  "types": [
+    {"id": "bouteilles",          "label": "Aplatissage bouteilles"},
+    {"id": "fusing_simple",       "label": "Fusing simple (1–2 couches)"},
+    {"id": "fusing_multicouche",  "label": "Fusing multicouche (3+ couches)"},
+    {"id": "fusing_incrustation", "label": "Fusing avec incrustations métalliques"},
+    {"id": "postformage",         "label": "Post-formage sur moule"},
+    {"id": "cuisson_moule",       "label": "Cuisson / préparation moule"}
+  ]
+}

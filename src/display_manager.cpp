@@ -275,7 +275,14 @@ void updateDisplay(bool force)
             minT -= pad;
             maxT += pad;
         }
-        if (minT >= maxT) maxT = minT + 1.0f;
+        // Plage Y minimale : évite que le bruit de quantification paraisse exagéré
+        // quand la température est stable (notamment en zone froide au démarrage).
+        if ((maxT - minT) < 10.0f)
+        {
+            float center = (maxT + minT) * 0.5f;
+            minT = center - 5.0f;
+            maxT = center + 5.0f;
+        }
 
         // Axes
         tft.drawFastVLine(gx, gy,     plotH, DISP_WHITE);  // axe Y

@@ -257,10 +257,6 @@ void loop()
 
         lastTempRead = millis();
 
-        // Buffer graphe circulaire (température filtrée pour TFT idle graph)
-        tempSamples[tempSampleIdx++] = (float)filteredTemp;
-        if (tempSampleIdx >= GRAPH_W) { tempSampleIdx = 0; tempSamplesFilled = true; }
-
         // Sécurité température
         // NaN + MIN sur valeur brute : détection immédiate de défaut capteur
         // MAX sur valeur filtrée : résistant aux pics de bruit near the limit
@@ -316,6 +312,17 @@ void loop()
         }
         pidLastInput   = filteredTemp;
         lastPIDCompute = millis();
+    }
+
+    // --- Buffer graphe circulaire (cadence = idleGraphUpdateInterval) ---
+    // La fenêtre affichée = GRAPH_W × idleGraphUpdateInterval
+    // (ex : 300 × 1 s = 5 min, 300 × 5 s = 25 min)
+    static unsigned long lastGraphSample = 0;
+    if (millis() - lastGraphSample >= idleGraphUpdateInterval)
+    {
+        tempSamples[tempSampleIdx++] = (float)filteredTemp;
+        if (tempSampleIdx >= GRAPH_W) { tempSampleIdx = 0; tempSamplesFilled = true; }
+        lastGraphSample = millis();
     }
 
     // --- Data logging ---

@@ -300,17 +300,28 @@ void updateDisplay(bool force)
             tft.drawString(label, 2, labelY, 1);
         }
 
-        // Graduations X (toutes les minutes — buffer 300s à 1s/sample)
+        // Graduations X — fenêtre = GRAPH_W × idleGraphUpdateInterval
         {
-            float pxPerMin = (float)gw * 60.0f / GRAPH_W;  // ~54.6 px/min
-            for (int t = 0; t <= 5; ++t)
+            float windowMin   = (float)GRAPH_W * idleGraphUpdateInterval / 60000.0f;
+            float pxPerMin    = (float)gw / windowMin;
+            int   tickStepMin = (windowMin >= 40.0f) ? 10
+                              : (windowMin >= 20.0f) ?  5
+                              : (windowMin >= 10.0f) ?  2
+                              :                         1;
+
+            // Tick origine (bord droit = maintenant)
+            tft.drawFastVLine(gx + gw - 1, xAxisY, 4, DISP_WHITE);
+            tft.setTextColor(DISP_WHITE, DISP_BLACK);
+            tft.drawCentreString("0", gx + gw - 1, xAxisY + 4, 1);
+
+            // Ticks passés
+            for (int t = tickStepMin; t * pxPerMin < (float)gw; t += tickStepMin)
             {
                 int xTick = gx + gw - 1 - (int)(t * pxPerMin);
-                if (xTick < gx) continue;
+                if (xTick < gx) break;
                 tft.drawFastVLine(xTick, xAxisY, 4, DISP_WHITE);
-                char tLabel[6];
-                if (t == 0) snprintf(tLabel, sizeof(tLabel), "0");
-                else        snprintf(tLabel, sizeof(tLabel), "-%dm", t);
+                char tLabel[8];
+                snprintf(tLabel, sizeof(tLabel), "-%dm", t);
                 tft.setTextColor(DISP_WHITE, DISP_BLACK);
                 tft.drawCentreString(tLabel, xTick, xAxisY + 4, 1);
             }

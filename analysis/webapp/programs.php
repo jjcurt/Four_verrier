@@ -65,10 +65,10 @@ if (empty($visible)): ?>
         </div>
         <div class="prog-actions">
             <a class="btn btn-grey btn-sm"
-               href="/program_view.php?file=<?= urlencode($p['filename']) ?>">👁 Voir</a>
-            <a class="btn btn-primary btn-sm"
                href="/download_prog.php?file=<?= urlencode($p['filename']) ?>"
                download="<?= h($p['filename']) ?>">⬇ Télécharger</a>
+            <button class="btn btn-danger btn-sm"
+                    onclick="deleteProgram('<?= h($p['filename']) ?>', this)">🗑 Supprimer</button>
         </div>
     </div>
 <?php endforeach; endif; ?>
@@ -77,5 +77,27 @@ if (empty($visible)): ?>
     💡 Pour créer ou modifier un programme, utilisez l'interface du four :
     <a href="http://192.168.0.100/programs.html" target="_blank">192.168.0.100/programs.html</a>
 </div>
+
+<script>
+async function deleteProgram(filename, btn) {
+    if (!confirm(`Supprimer le programme "${filename.replace(/\.json$/i,'')}" ?\n\nCette action supprime le fichier local. Pensez également à le supprimer sur la carte SD via l'interface du four.`)) return;
+    btn.disabled = true;
+    try {
+        const fd = new FormData();
+        fd.append('file', filename);
+        const r = await fetch('/delete_prog.php', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d.ok) {
+            btn.closest('.prog-card').remove();
+        } else {
+            alert('Erreur : ' + (d.error ?? 'inconnue'));
+            btn.disabled = false;
+        }
+    } catch(e) {
+        alert('Erreur réseau : ' + e);
+        btn.disabled = false;
+    }
+}
+</script>
 
 <?php layoutFoot(); ?>

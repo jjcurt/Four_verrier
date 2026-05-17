@@ -88,6 +88,7 @@ h2   { font-size: 1.15rem; color: var(--green); margin: 24px 0 12px; }
 .btn-primary  { background: var(--green); color: white; }
 .btn-orange   { background: var(--orange); color: white; }
 .btn-grey     { background: #e0e0e0; color: #333; }
+.btn-danger   { background: #c62828; color: white; }
 .btn-sm       { padding: 6px 12px; font-size: .85rem; }
 
 /* ---------- Section info session ---------- */

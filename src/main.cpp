@@ -124,7 +124,7 @@ double estimatedStabilizationTime = 3.0;
 double cookingZoneMargin = 20.0;
 
 // Graphe température
-unsigned long idleGraphUpdateInterval = 5000;
+unsigned long idleGraphUpdateInterval = 1000;
 float tempSamples[GRAPH_W];
 int   tempSampleIdx     = 0;
 bool  tempSamplesFilled = false;

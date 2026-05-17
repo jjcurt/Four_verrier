@@ -240,6 +240,20 @@ void updateDisplay(bool force)
         tft.fillRect(gx, gy, gw, plotH, DISP_BLACK);      // zone tracé
         tft.fillRect(gx, xAxisY, gw, DISP_GRAPH_XLABEL_H, DISP_BLACK); // zone labels X
 
+        // Lissage affichage uniquement — moyenne glissante 3 pts sur le buffer circulaire.
+        // N'affecte ni filteredTemp ni le PID.
+        auto smoothSample = [&](int baseStart, int pos, int total) -> float {
+            float sum = 0.0f; int cnt = 0;
+            for (int k = -1; k <= 1; ++k)
+            {
+                int p = pos + k;
+                if (p < 0 || p >= total) continue;
+                sum += tempSamples[tempSamplesFilled ? ((baseStart + p) % GRAPH_W) : p];
+                ++cnt;
+            }
+            return cnt > 0 ? sum / cnt : 0.0f;
+        };
+
         float minT = 9999.0, maxT = -9999.0;
         int count = tempSamplesFilled ? GRAPH_W : tempSampleIdx;
         if (count <= 1)
@@ -249,10 +263,10 @@ void updateDisplay(bool force)
         }
         else
         {
+            int mmStart = tempSamplesFilled ? tempSampleIdx : 0;
             for (int i = 0; i < count; ++i)
             {
-                int idx = tempSamplesFilled ? ((tempSampleIdx + i) % GRAPH_W) : i;
-                float v = tempSamples[idx];
+                float v = smoothSample(mmStart, i, count);
                 if (v < minT) minT = v;
                 if (v > maxT) maxT = v;
             }
@@ -304,14 +318,13 @@ void updateDisplay(bool force)
                 : 0;
             int xOffset = gw - plotCount;   // décalage pour ancrer la courbe à droite
             int prevX = gx + xOffset;
-            float firstSample = tempSamples[startIdx];
+            float firstSample = smoothSample(startIdx, 0, plotCount);
             int prevY = xAxisY - 1 - (int)((firstSample - minT) / (maxT - minT) * (plotH - 1));
             prevY = constrain(prevY, gy, xAxisY - 1);
             for (int i = 1; i < plotCount; ++i)
             {
-                int idx = tempSamplesFilled ? ((startIdx + i) % GRAPH_W) : i;
                 int px = gx + xOffset + i;
-                float s = tempSamples[idx];
+                float s = smoothSample(startIdx, i, plotCount);
                 int y = xAxisY - 1 - (int)((s - minT) / (maxT - minT) * (plotH - 1));
                 y = constrain(y, gy, xAxisY - 1);
                 tft.drawLine(prevX, prevY, px, y, DISP_GREEN);

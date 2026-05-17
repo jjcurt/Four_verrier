@@ -477,7 +477,7 @@
                         
                         // Load temperature filter alpha (v1.6.1)
                         if (config.tempFilterAlpha !== undefined) {
-                            document.getElementById('tempFilterAlpha').value = config.tempFilterAlpha;
+                            document.getElementById('tempFilterAlpha').value = parseFloat(config.tempFilterAlpha.toFixed(2));
                         }
                         
                         document.getElementById('currentPid').textContent = 
@@ -489,16 +489,16 @@
                 })
                 .catch(error => {
                     document.getElementById('currentPid').textContent = 
-                        'Aucune configuration PID trouvée (utilise les valeurs firmware par défaut: Kp=12.0, Ki=0.05, Kd=50.0)';
+                        'Aucune configuration PID trouvée (utilise les valeurs firmware par défaut: Kp=40.0, Ki=0.2, Kd=4.0)';
                 });
         }
 
-        // Load v7/v1.4.7 validated defaults
+        // Load v7/v1.7.0 validated defaults
         function loadDefaults(silent = false) {
             // PID defaults
-            document.getElementById('pidKp').value = 12.0;
-            document.getElementById('pidKi').value = 0.05;
-            document.getElementById('pidKd').value = 50.0;
+            document.getElementById('pidKp').value = 40.0;
+            document.getElementById('pidKi').value = 0.2;
+            document.getElementById('pidKd').value = 4.0;
 
             // STABILIZING defaults
             document.getElementById('stabilizingTimeoutMinutes').value = 20.0;
@@ -522,9 +522,9 @@
             document.getElementById('disablePidReset').checked = false;
 
             // Temperature filter alpha defaults (v1.6.1)
-            document.getElementById('tempFilterAlpha').value = 0.8;
+            document.getElementById('tempFilterAlpha').value = 0.4;
 
-            if (!silent) showStatus('pidStatus', 'Valeurs v1.4.9 chargées (non enregistrées)', 'success');
+            if (!silent) showStatus('pidStatus', 'Valeurs v1.7.0 chargées (non enregistrées)', 'success');
         }
 
         // Handle WiFi form submission

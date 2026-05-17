@@ -65,6 +65,8 @@ if (empty($visible)): ?>
         </div>
         <div class="prog-actions">
             <a class="btn btn-grey btn-sm"
+               href="/program_view.php?file=<?= urlencode($p['filename']) ?>">👁 Voir</a>
+            <a class="btn btn-primary btn-sm"
                href="/download_prog.php?file=<?= urlencode($p['filename']) ?>"
                download="<?= h($p['filename']) ?>">⬇ Télécharger</a>
             <button class="btn btn-danger btn-sm"

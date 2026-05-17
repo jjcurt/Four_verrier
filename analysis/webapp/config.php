@@ -20,6 +20,7 @@ function db(): PDO {
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
+        $pdo->exec('PRAGMA query_only = ON');   // lecture seule — ingest.py gère les écritures
         $pdo->exec('PRAGMA foreign_keys = ON');
     }
     return $pdo;

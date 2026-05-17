@@ -244,7 +244,7 @@ void updateDisplay(bool force)
         // N'affecte ni filteredTemp ni le PID.
         auto smoothSample = [&](int baseStart, int pos, int total) -> float {
             float sum = 0.0f; int cnt = 0;
-            for (int k = -1; k <= 1; ++k)
+            for (int k = -2; k <= 2; ++k)
             {
                 int p = pos + k;
                 if (p < 0 || p >= total) continue;

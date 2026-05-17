@@ -32,6 +32,7 @@ extern double        filteredTemp;
 extern float         tempSamples[];
 extern int           tempSampleIdx;
 extern bool          tempSamplesFilled;
+extern unsigned long idleGraphUpdateInterval;
 
 // ---------------------------------------------------------------------------
 // drawStaticUI — Cadre invariant (une seule fois au démarrage ou après reset)
@@ -72,7 +73,7 @@ void updateDisplay(bool force)
 
     const unsigned long now = millis();
     bool doTop   = force || (now - lastTopUpdate   >= 250);
-    bool doGraph = force || (now - lastGraphUpdate >= 1000);
+    bool doGraph = force || (now - lastGraphUpdate >= idleGraphUpdateInterval);
 
     if (!doTop && !doGraph)
         return;
